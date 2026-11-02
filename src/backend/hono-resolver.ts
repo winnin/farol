@@ -36,7 +36,7 @@ function returnsOf(fn: ts.FunctionLikeDeclaration): ts.Expression[] {
 /** Resolution of expressions to Hono apps with the type checker (works without node_modules: names are read on imports). */
 export function appResolver(checker: ts.TypeChecker) {
   const declOf = (id: ts.MemberName): ts.Declaration | undefined => {
-    const symbol = checker.getSymbolAtLocation(id)
+    const symbol = ts.isShorthandPropertyAssignment(id.parent) ? checker.getShorthandAssignmentValueSymbol(id.parent) : checker.getSymbolAtLocation(id)
     const target = symbol && symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol
     return target?.valueDeclaration ?? target?.declarations?.[0]
   }

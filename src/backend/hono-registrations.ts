@@ -31,7 +31,7 @@ export function registrationReader(r: AppResolver) {
     const path = literal(call.arguments[0])
     return { path: path ?? '*', args: path === undefined ? [...call.arguments] : call.arguments.slice(1) }
   }
-  /** A middleware argument whose code comes from the callers: a parameter, also through a property, a call or a variable. */
+  /** A middleware argument whose code comes from the callers or can change: a parameter or a variable that is not `const`, also through a property, a call, a condition or a literal. */
   const unknownCode = (arg: ts.Expression, seen = new Set<ts.Node>()): boolean => {
     const x = ts.isSpreadElement(arg) ? unwrap(arg.expression) : unwrap(arg)
     if (seen.has(x)) return false
@@ -39,13 +39,17 @@ export function registrationReader(r: AppResolver) {
     if (x.kind === ts.SyntaxKind.ThisKeyword) return true
     if (ts.isPropertyAccessExpression(x) || ts.isElementAccessExpression(x) || ts.isCallExpression(x)) return unknownCode(x.expression, seen)
     if (ts.isArrayLiteralExpression(x)) return x.elements.some((e) => unknownCode(e, seen))
+    if (ts.isConditionalExpression(x)) return unknownCode(x.whenTrue, seen) || unknownCode(x.whenFalse, seen)
+    if (ts.isBinaryExpression(x)) return unknownCode(x.left, seen) || unknownCode(x.right, seen)
+    if (ts.isObjectLiteralExpression(x)) return x.properties.some((p) => (ts.isPropertyAssignment(p) ? unknownCode(p.initializer, seen) : ts.isShorthandPropertyAssignment(p) ? unknownCode(p.name, seen) : ts.isSpreadAssignment(p) && unknownCode(p.expression, seen)))
     if (!ts.isIdentifier(x)) return false
     let decl: ts.Node | undefined = r.declOf(x)
     while (decl && ts.isBindingElement(decl)) decl = decl.parent.parent
     if (!decl || decl.getSourceFile().isDeclarationFile) return false
     if (ts.isParameter(decl)) return true
     if (!ts.isVariableDeclaration(decl)) return false
-    return decl.initializer ? unknownCode(decl.initializer, seen) : true
+    if (!decl.initializer || !(ts.getCombinedNodeFlags(decl) & ts.NodeFlags.Const)) return true
+    return unknownCode(decl.initializer, seen)
   }
   return { registrationOf, unknownCode }
 }

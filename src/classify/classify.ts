@@ -5,7 +5,7 @@ import type { AddedRoute, AffectedRoute, Dependencies, OutputFile, UnresolvedImp
 import type { ImportGraph, ParseError } from '../project/graph.js'
 import { KEY_SEPARATOR } from '../routes/paths.js'
 import type { DynamicRoute, RouteEntry, RouteTable } from '../routes/types.js'
-import { checkBarrelAdditive, checkI18nAdditive, compareRouteTables, JsonParseError, unexplainedRemovedLines } from './additive.js'
+import { checkBarrelAdditive, checkI18nAdditive, compareRouteTables, JsonParseError, losesTokens, unexplainedRemovedLines } from './additive.js'
 import { createReachIndex, reachFrom, routesReaching, type ReachIndex } from './reach.js'
 import { classificationFrom, reason, REASONS, sortReasons, type Classification, type Reason } from './reasons.js'
 import type { AnalysisRole } from './roles.js'
@@ -284,8 +284,10 @@ export function classify(input: ClassifyInput): ClassifyResult {
       const headText = input.headText.get(file.path)
       if (baseText === undefined || headText === undefined) throw new Error(`internal: missing base or head content of ${file.path}`)
       const removedLines = unexplainedRemovedLines(file.path, baseText, headText, file.removed.map((l) => l.line))
-      out.additive = tableChanges.length === 0 && removedLines.length === 0
+      const lostCode = removedLines.length === 0 && losesTokens(file.path, baseText, headText)
+      out.additive = tableChanges.length === 0 && removedLines.length === 0 && !lostCode
       if (removedLines.length > 0) reasons.push(reason('routes-not-additive', `${removedLines.length} line(s) removed (line ${removedLines.join(', ')} of the base)`, file.path))
+      if (lostCode) reasons.push(reason('routes-not-additive', 'a line differs only by spaces, and the code changed (a string, for example)', file.path))
       if (out.additive) reasons.push(reason('routes-additive', 'every existing route is unchanged and no line was removed', file.path))
       continue
     }

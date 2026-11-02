@@ -8,6 +8,26 @@ const tokens = (code: string, file = 'a.ts'): string[] => {
 }
 const same = (a: string, b: string, file = 'a.ts'): boolean => tokens(a, file).join(' ') === tokens(b, file).join(' ')
 
+describe('JSX text, as React reads it', () => {
+  it.each([
+    ['a space before text', '<p>{a} items</p>', '<p>{a}items</p>'],
+    ['a space between expressions', '<p>{a} {b}</p>', '<p>{a}{b}</p>'],
+    ['a space after text', '<p>items {a}</p>', '<p>items{a}</p>'],
+    ['spaces inside a line', '<p>a  b</p>', '<p>a b</p>'],
+  ])('%s is a change', (_name, a, b) => {
+    expect(same(`const x = ${a}`, `const x = ${b}`, 'a.tsx')).toBe(false)
+  })
+
+  it.each([
+    ['a line break around text', '<p>\n  items\n</p>', '<p>items</p>'],
+    ['indent between lines', '<p>\n  a\n      b\n</p>', '<p>\n  a\n  b\n</p>'],
+    ['lines React joins with a space', '<p>\n  a\n  b\n</p>', '<p>a b</p>'],
+    ['a line break between tags', '<div>\n  <b />\n</div>', '<div><b /></div>'],
+  ])('%s is formatting', (_name, a, b) => {
+    expect(same(`const x = ${a}`, `const x = ${b}`, 'a.tsx')).toBe(true)
+  })
+})
+
 describe('the tokens of parsed code', () => {
   it.each([
     ['a line comment', 'const a = 1 // note\n', 'const a = 1\n'],

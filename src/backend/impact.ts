@@ -1,7 +1,8 @@
 import { compareStrings, sortedUnique } from '../output/order.js'
 import { keyPath, overlaps } from './hono-paths.js'
 import { codeText, parseIsolated } from '../project/parse.js'
-import { appCodeChanged, diffResolvers, resolverEntries, type MountEntry, type ResolverChanges } from './resolvers.js'
+import { appCodeChanged } from './call-order.js'
+import { diffResolvers, resolverEntries, type MountEntry, type ResolverChanges } from './resolvers.js'
 import { restAnchor } from './rest.js'
 import type { SchemaDiff } from './schema.js'
 
@@ -76,14 +77,15 @@ const sameCode = (file: string, a: string, b: string): boolean => {
 
 /**
  * Compares both versions of a code file. Item by item, moving `app.use(mw)` or a new property of its options is
- * additive; for a file with an app it is not, and every endpoint under its apps is reached.
+ * additive; for a file with an app or REST handlers it is not, and every endpoint under its apps is reached.
  */
 export function compareCodeFile(table: CodeTable, f: CodeFile): CodeFileChanges {
   const usesHono = table.honoFiles.has(f.file)
   const base = resolverEntries(f.file, f.before, table.typeFields, f.rest, usesHono || f.holdsApp)
   const head = resolverEntries(f.file, f.after, table.typeFields, f.rest, usesHono || f.holdsApp)
   const diff = diffResolvers(base, head)
-  const edited = (f.isSource && !sameCode(f.file, f.before, f.after)) || (f.holdsApp && appCodeChanged(base, head))
+  const hasHandlers = [...base.entries, ...head.entries].some((e) => e.key.includes(' '))
+  const edited = (f.isSource && !sameCode(f.file, f.before, f.after)) || ((f.holdsApp || hasHandlers) && appCodeChanged(base, head))
   const reaches = f.holdsApp || (usesHono && base.middleware.size + head.middleware.size > 0)
   return { ...diff, restChanged: diff.restChanged || edited, wide: diff.wide || edited, keys: [...new Set([...base.entries, ...head.entries].map((e) => e.key))], reachKeys: reaches ? table.fileReachKeys(f.file) : [] }
 }
@@ -129,7 +131,7 @@ export function backendFileImpact(table: ImpactTable, file: string, schema: Sche
     // The endpoints under a removed mount are gone from the head: they cannot be named, the change still counts.
     problems.push(...resolvers.problems)
     if (resolvers.restChanged) {
-      problems.push('code outside the resolvers changed (imports, helpers or module-level code): every resolver of the file may behave differently')
+      problems.push('code outside the resolvers changed (imports, helpers, module-level code or the order of calls): every resolver of the file may behave differently')
       for (const k of resolvers.keys) hit(using(k), `module code of ${k}`)
     }
     if (resolvers.wide) hit([...resolvers.reachKeys], `module code of ${file}`)

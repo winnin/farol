@@ -33,11 +33,11 @@ describe('Hono middleware placement', () => {
   })
 
   it('a parameter as middleware is a dynamic route: its code comes from the callers', () => {
-    expect(dynamic({ ...base, 'src/main.ts': app("export function install(handler: never) {\n  app.use('*', handler)\n}") })).toEqual(['src/main.ts:6 Hono middleware comes from a parameter or a variable with no value: farol cannot find its code'])
+    expect(dynamic({ ...base, 'src/main.ts': app("export function install(handler: never) {\n  app.use('*', handler)\n}") })).toEqual(['src/main.ts:6 Hono middleware comes from a parameter or a variable that can change: farol cannot find its code'])
   })
 
   it('a parameter as a guard before the handler is a dynamic route', () => {
-    expect(dynamic({ ...base, 'src/main.ts': app("export function install(guard: never) {\n  app.post('/x', guard, (c) => c.text('ok'))\n}") })).toEqual(['src/main.ts:6 Hono middleware comes from a parameter or a variable with no value: farol cannot find its code'])
+    expect(dynamic({ ...base, 'src/main.ts': app("export function install(guard: never) {\n  app.post('/x', guard, (c) => c.text('ok'))\n}") })).toEqual(['src/main.ts:6 Hono middleware comes from a parameter or a variable that can change: farol cannot find its code'])
   })
 
   it.each([
@@ -47,9 +47,28 @@ describe('Hono middleware placement', () => {
     ['a variable set from a parameter', 'auth: never', "const held = auth\n  app.use('*', held)"],
     ['a call of a parameter', 'make: () => never', "app.use('*', make())"],
     ['a variable with no initial value', '', "let held: never\n  app.use('*', held)"],
+    ['a branch of a conditional', 'mw: never, on: boolean', "app.use('*', on ? mw : other)"],
+    ['an operand of ??', 'mw: never', "app.use('*', mw ?? other)"],
+    ['an operand of ||', 'mw: never', "app.use('*', mw || other)"],
+    ['a guard in a conditional', 'mw: never, on: boolean', "app.post('/x', on ? mw : other, (c) => c.text('ok'))"],
+    ['a spread conditional', 'mws: never[], on: boolean', "app.use('*', ...(on ? mws : []))"],
+    ['a property of a local object', 'mw: never', "const held = { m: mw }\n  app.use('*', held.m)"],
+    ['a shorthand property of a local object', 'mw: never', "const held = { mw }\n  app.use('*', held.mw)"],
+    ['a property of a destructured local object', 'mw: never', "const { m } = { m: mw }\n  app.use('*', m)"],
+    ['a variable that is set again', 'mw: never, on: boolean', "let held = other\n  if (on) held = mw\n  app.use('*', held)"],
+    ['the last argument of a handler call', 'h: never', "app.get('/x', h)"],
+    ['a spread last argument of a handler call', 'hs: never[]', "app.get('/x', ...hs)"],
   ])('%s as middleware is a dynamic route', (_name, params, body) => {
-    const details = table({ ...base, 'src/main.ts': app(`export function install(${params}) {\n  ${body}\n}`) }).dynamic.map((d) => d.detail)
-    expect(details).toEqual(['Hono middleware comes from a parameter or a variable with no value: farol cannot find its code'])
+    const details = table({ ...base, 'src/main.ts': app(`const other = (c: never) => c\nexport function install(${params}) {\n  ${body}\n}`) }).dynamic.map((d) => d.detail)
+    expect(details).toEqual(['Hono middleware comes from a parameter or a variable that can change: farol cannot find its code'])
+  })
+
+  it.each([
+    ['a const handler', "const h = (c: never) => c\n  app.get('/x', h)"],
+    ['a conditional between known functions', "const a = (c: never) => c\n  const b = (c: never) => c\n  app.use('*', Math.random() ? a : b)"],
+    ['a call of a known function with a parameter', "const make = (o: unknown) => (c: never) => (o, c)\n  app.use('*', make(opt))"],
+  ])('%s is not a dynamic route', (_name, body) => {
+    expect(table({ ...base, 'src/main.ts': app(`export function install(opt: unknown) {\n  ${body}\n}`) }).dynamic).toEqual([])
   })
 
   it('an imported function called on its module keeps the mount above the app it receives', () => {

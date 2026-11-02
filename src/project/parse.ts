@@ -55,10 +55,16 @@ const ENDS_WITH_SEMICOLON = new Set([
   ts.SyntaxKind.PropertyDeclaration,
 ])
 
+/** JSX text as React reads it: lines without their indent, joined by a space. Spaces on one line count. */
+function jsxText(text: string): string {
+  const lines = text.split(/\r\n|\n|\r/)
+  return lines.map((line, i) => (i === 0 ? line : line.trimStart())).map((line, i) => (i === lines.length - 1 ? line : line.trimEnd())).filter((line) => line !== '').join(' ')
+}
+
 /**
- * The code of a node as the parser read it, without comments or formatting: strings, templates and regular expressions
- * are one token each, every statement ends with `;`, a trailing comma in `{}` or `()` does not count, and text the
- * parser skipped is kept. Nodes in `removed` (ranges of the file) are left out, with the comma after them.
+ * The code of a node as the parser read it, without comments or formatting: strings, templates, regular expressions
+ * and JSX text are one token each, every statement ends with `;`, a trailing comma in `{}` or `()` does not count, and
+ * text the parser skipped is kept. Nodes in `removed` (ranges of the file) are left out, with the comma after them.
  */
 export function codeTokens(node: ts.Node, sf: ts.SourceFile, removed: readonly (readonly [number, number])[] = []): string[] {
   const out: string[] = []
@@ -72,7 +78,7 @@ export function codeTokens(node: ts.Node, sf: ts.SourceFile, removed: readonly (
     if (children.length === 0) {
       const skipped = sf.text.slice(at, n.pos).trim()
       if (skipped) out.push(skipped)
-      const text = n.getText(sf)
+      const text = n.kind === ts.SyntaxKind.JsxText ? jsxText(sf.text.slice(n.pos, n.end)) : n.getText(sf)
       if ((text === '}' || text === ')') && out[out.length - 1] === ',') out.pop()
       if (text) out.push(text)
       at = Math.max(at, n.end)

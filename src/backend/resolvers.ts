@@ -1,9 +1,11 @@
 import ts from 'typescript'
 import { compareStrings, sortedUnique } from '../output/order.js'
 import { codeText, parseIsolated, unwrap } from '../project/parse.js'
+import { callOrder, isBlank, type Call } from './call-order.js'
 import { mountNodes } from './hono.js'
 import { importsHono, isHonoModule } from './hono-resolver.js'
 import { isWidePath, plainChain, restNodes, takesNext, type RestNode } from './rest.js'
+import { GQL_TAGS } from './schema.js'
 
 /** One resolver of a resolver map: `Type.field` and the code that implements it. */
 export interface ResolverEntry {
@@ -20,7 +22,7 @@ function propName(name: ts.PropertyName): string | undefined {
 }
 
 /** The text of a handler's registration without the handler: its chain and its other arguments. */
-const registrationText = (n: RestNode, sf: ts.SourceFile): string => codeText(n.node, sf).replace(codeText(n.value, sf), '')
+const registrationText = (n: RestNode, sf: ts.SourceFile): string => codeText(n.node, sf, [[n.value.getStart(sf), n.value.end]])
 
 /** Field name marking an enum in the type-fields map: its resolver maps internal values. */
 export const ENUM_MARKER = '__values'
@@ -86,12 +88,12 @@ export function runsCode(node: ts.Node, honoNames: ReadonlySet<string>): boolean
   if (ts.isTypeNode(node) || ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) return false
   // A `require('x')` that keeps no value only runs that module, like a side-effect import.
   if (ts.isExpressionStatement(node) && isRequire(unwrap(node.expression))) return true
-  if (ts.isDecorator(node) || ts.isClassStaticBlockDeclaration(node) || ts.isAwaitExpression(node) || ts.isYieldExpression(node) || ts.isDeleteExpression(node)) return true
+  if (ts.isDecorator(node) || ts.isClassStaticBlockDeclaration(node) || ts.isAwaitExpression(node) || ts.isYieldExpression(node) || ts.isDeleteExpression(node) || ts.isThrowStatement(node)) return true
   if (ts.isFunctionLike(node)) return (ts.canHaveDecorators(node) && (ts.getDecorators(node) ?? []).length > 0) || (node.name !== undefined && ts.isComputedPropertyName(node.name) && runs(node.name.expression))
   if (ts.isPropertyDeclaration(node)) return (ts.getDecorators(node) ?? []).length > 0 || (ts.isComputedPropertyName(node.name) && runs(node.name.expression)) || (ts.getCombinedModifierFlags(node) & ts.ModifierFlags.Static ? runs(node.initializer) : false)
   if (ts.isCallExpression(node)) return !isRequire(node)
   if (ts.isNewExpression(node)) return !(ts.isIdentifier(node.expression) && honoNames.has(node.expression.text)) || (node.arguments ?? []).some(runs)
-  if (ts.isTaggedTemplateExpression(node)) return !(ts.isIdentifier(node.tag) && (node.tag.text === 'gql' || node.tag.text === 'graphql')) || runs(node.template)
+  if (ts.isTaggedTemplateExpression(node)) return !(ts.isIdentifier(node.tag) && GQL_TAGS.has(node.tag.text)) || runs(node.template)
   if (ts.isBinaryExpression(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment) return !(node.operatorToken.kind === ts.SyntaxKind.EqualsToken && isExportTarget(node.left)) || runs(node.right)
   if ((ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) && (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken)) return true
   return ts.forEachChild(node, (child) => (runs(child) ? true : undefined)) ?? false
@@ -122,28 +124,18 @@ export interface FileEntries {
   impure: Map<string, string>
   middleware: Set<string>
   properties: string[]
-  /** Calls in source order, outside inline function arguments. Read when mounts are read. */
-  calls: string[]
+  /** Calls in source order, with the place they run. */
+  calls: Call[]
 }
 
-/** Calls of a file in source order; a function passed as an argument is a handler, compared on its own. */
-function callOrder(sf: ts.SourceFile): string[] {
-  const out: string[] = []
-  const visit = (node: ts.Node): void => {
-    if (ts.isCallExpression(node)) out.push(codeText(node, sf))
-    ts.forEachChild(node, (child) => {
-      if (!(ts.isCallExpression(node) && ts.isFunctionLike(child))) visit(child)
-    })
-  }
-  visit(sf)
-  return out
-}
-
-/** `gql` templates: the SDL is compared on its own, member by member. */
+/** The SDL of `gql` templates, compared on its own, member by member. Interpolated code is module code. */
 function schemaTemplates(sf: ts.SourceFile): ts.Node[] {
   const out: ts.Node[] = []
   const visit = (node: ts.Node): void => {
-    if (ts.isTaggedTemplateExpression(node) && ts.isIdentifier(node.tag) && (node.tag.text === 'gql' || node.tag.text === 'graphql')) out.push(node)
+    if (ts.isTaggedTemplateExpression(node) && ts.isIdentifier(node.tag) && GQL_TAGS.has(node.tag.text)) {
+      if (ts.isNoSubstitutionTemplateLiteral(node.template)) out.push(node)
+      else out.push(node.template.head, ...node.template.templateSpans.map((s) => s.literal))
+    }
     ts.forEachChild(node, visit)
   }
   visit(sf)
@@ -224,7 +216,8 @@ export function resolverEntries(
   const rest = nodes.filter((n): n is RestNode => 'receiver' in n)
   const impure = textsByKey(rest.filter((n) => !plainChain(n.receiver) || n.node.arguments.some((a) => runsCode(a, honoNames))).map((n) => ({ key: n.key, text: registrationText(n, sf) })))
   const middleware = new Set(rest.filter(middlewareLike).map((n) => n.key))
-  return { entries: entries.sort((a, b) => compareStrings(a.key, b.key)), rest: items, loadCode, imports, mounts: new Map(mounts.map((m) => [m.id, { id: m.id, prefix: m.prefix, plain: m.plain }])), impure, middleware, properties, calls: readsHono ? callOrder(sf) : [] }
+  const calls = withRest ? callOrder(sf, blank, new Set(rest.map((n) => n.node))) : []
+  return { entries: entries.sort((a, b) => compareStrings(a.key, b.key)), rest: items, loadCode, imports, mounts: new Map(mounts.map((m) => [m.id, { id: m.id, prefix: m.prefix, plain: m.plain }])), impure, middleware, properties, calls }
 }
 
 /** The object literal a top-level statement defines (`const X = {…}`, `export default {…}`, `module.exports = {…}`). */
@@ -240,30 +233,22 @@ function topLevelObject(statement: ts.Statement): ts.ObjectLiteralExpression | u
 /** Tokens as text for a message. */
 const readable = (tokens: string): string => tokens.replace(/\s*([.,;()])\s*/g, '$1').replace(/,/g, ', ')
 
-const isBlank = (item: string): boolean => item === '' || item === ';'
-
-/** Items of `items` that `other` also has keep their order there (`other` may have new ones between them). */
-function keepsOrder(items: readonly string[], other: readonly string[]): boolean {
-  const kept = items.filter((i) => !isBlank(i) && other.includes(i))
-  let at = 0
-  for (const item of other) if (item === kept[at]) at++
-  return at === kept.length
-}
-
-/**
- * Whether a file with a Hono app changed in a way the item comparison calls additive: statements or calls that stayed
- * changed order (`app.use(mw)` after the routes no longer runs for them; the first matching handler serves a request),
- * or an object has a new property (`use(cors(options))`).
- */
-export function appCodeChanged(base: FileEntries, head: FileEntries): boolean {
-  return !keepsOrder(base.rest, head.rest) || !keepsOrder(base.calls, head.calls) || head.properties.some((p) => !isBlank(p) && !base.rest.includes(p))
+/** Items of `items` the base does not have, a copy of one counted as new. */
+function newItems(items: readonly string[], base: readonly string[]): string[] {
+  const left = new Map<string, number>()
+  for (const b of base) left.set(b, (left.get(b) ?? 0) + 1)
+  return items.filter((i) => {
+    const n = left.get(i) ?? 0
+    left.set(i, n - 1)
+    return n <= 0
+  })
 }
 
 export interface ResolverChanges {
   added: string[]
   removed: string[]
   changed: string[]
-  /** Code outside the resolver members changed (imports, helpers, module-level code): every resolver may be affected. */
+  /** Code outside the resolver members changed (imports, helpers, module-level code, the order of calls): every resolver may be affected. */
   restChanged: boolean
   /** A change that can reach every endpoint of the file's apps: module code, new load code, or a chain or handler that runs for others. */
   wide: boolean
@@ -281,7 +266,7 @@ export function diffResolvers(base: FileEntries, head: FileEntries): ResolverCha
   const removed = [...before.keys()].filter((k) => !after.has(k)).sort(compareStrings)
   const changed = [...before.keys()].filter((k) => after.has(k) && after.get(k) !== before.get(k)).sort(compareStrings)
   const restChanged = base.rest.some((item) => !head.rest.includes(item)) || [...base.imports].some((i) => !head.imports.has(i))
-  const newLoadCode = head.loadCode.filter((c) => !base.rest.includes(c))
+  const newLoadCode = newItems(head.loadCode, base.rest)
   const newSideEffects = [...head.imports].filter((i) => i.endsWith('|') && !base.imports.has(i))
   const runsForOthers = (k: string): boolean => base.impure.get(k) !== head.impure.get(k) || base.middleware.has(k) || head.middleware.has(k)
   return {

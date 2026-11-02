@@ -28,7 +28,7 @@ export function takesNext(a: ts.Expression): boolean {
   return (ts.isArrowFunction(x) || ts.isFunctionExpression(x)) && hasNextParameter(x)
 }
 
-/** A path that serves many requests (`*`, or a `{…}` pattern): a named handler there is treated as middleware. */
+/** A path that serves many requests (`*`, or a `{…}` pattern): a named handler there can be middleware. */
 export const isWidePath = (path: string): boolean => path.includes('*') || path.includes('{')
 
 export function literal(node: ts.Node | undefined): string | undefined {

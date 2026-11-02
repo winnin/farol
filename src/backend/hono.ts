@@ -172,7 +172,7 @@ function readApps(files: readonly ts.SourceFile[], honoFiles: ReadonlySet<ts.Sou
   const middlewareCall = (call: AppCall): void => {
     const name = call.expression.name.text
     const registration = registrationOf(call)
-    const guards = METHODS.has(name) ? call.arguments.slice(1, -1) : []
+    const guards = METHODS.has(name) ? call.arguments.slice(1) : []
     const app = r.appOf(call.expression.expression)
     if (app && METHODS.has(name) && call.arguments.length >= 2) recordApp(call, app)
     if (!registration && guards.length === 0) return
@@ -181,7 +181,7 @@ function readApps(files: readonly ts.SourceFile[], honoFiles: ReadonlySet<ts.Sou
       if (registration && !METHODS.has(name) && honoFiles.has(call.getSourceFile())) at(call, `Hono ${name}() is on an app farol cannot follow: its middleware cannot be placed`)
       return
     }
-    for (const a of new Set([...(registration?.args ?? []), ...guards])) if (unknownCode(a)) at(a, 'Hono middleware comes from a parameter or a variable with no value: farol cannot find its code')
+    for (const a of new Set([...(registration?.args ?? []), ...guards])) if (unknownCode(a)) at(a, 'Hono middleware comes from a parameter or a variable that can change: farol cannot find its code')
     if (!registration) return
     // `onError` runs only when a handler throws: a new mount with one adds no code to other endpoints' requests.
     if (name !== 'onError') middleware.add(app)
