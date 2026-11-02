@@ -2,7 +2,7 @@ import { Kind, type DocumentNode } from 'graphql'
 import { backendFileImpact, mountImpacts, type AddedMount, type BackendFileImpact } from '../backend/impact.js'
 import type { BackendTable } from '../backend/entrypoints.js'
 import { holdsApp } from '../backend/hono.js'
-import { diffResolvers, itemsMoved, resolverEntries, stripComments } from '../backend/resolvers.js'
+import { appCodeChanged, diffResolvers, resolverEntries, stripComments } from '../backend/resolvers.js'
 import { restAnchor } from '../backend/rest.js'
 import { diffSdl, parseSdl, sdlSources } from '../backend/schema.js'
 import { isScriptFile } from '../classify/declarations-only.js'
@@ -61,9 +61,9 @@ export async function backendImpacts(
       // A resolver file or a file with an app is always compared: with no entries left, its module code is what changed.
       if (roleOf(f.path) === 'resolvers' || appFiles.has(f.path) || b.entries.length + h.entries.length + b.mounts.size + h.mounts.size > 0) {
         const diff = diffResolvers(b, h)
-        // Line by line, moving `app.use(mw)` or a new property of its options is additive; for a file with an app it is not.
-        const sourceEdit = roleOf(f.path) === 'source' && stripComments(before).replace(/\s+/g, ' ') !== stripComments(after).replace(/\s+/g, ' ')
-        const moved = sourceEdit || (appFiles.has(f.path) && itemsMoved(b.rest, h.rest))
+        // Item by item, moving `app.use(mw)` or a new property of its options is additive; for a file with an app it is not.
+        const sourceEdit = roleOf(f.path) === 'source' && stripComments(before, f.path).replace(/\s+/g, ' ') !== stripComments(after, f.path).replace(/\s+/g, ' ')
+        const moved = sourceEdit || (appFiles.has(f.path) && appCodeChanged(b, h))
         const reaches = appFiles.has(f.path) || (table.honoFiles.has(f.path) && b.middleware.size + h.middleware.size > 0)
         resolvers = { ...diff, restChanged: diff.restChanged || moved, wide: diff.wide || moved, keys: [...new Set([...b.entries, ...h.entries].map((e) => e.key))], reachKeys: reaches ? table.fileReachKeys(f.path) : [] }
       }

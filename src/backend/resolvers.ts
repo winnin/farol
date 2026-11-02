@@ -124,7 +124,7 @@ export function resolverEntries(
   typeFields: ReadonlyMap<string, ReadonlySet<string>>,
   withRest = true,
   hono = false,
-): { entries: ResolverEntry[]; rest: string[]; loadCode: string[]; imports: Set<string>; mounts: Map<string, MountEntry>; impure: Map<string, string>; middleware: Set<string> } {
+): { entries: ResolverEntry[]; rest: string[]; loadCode: string[]; imports: Set<string>; mounts: Map<string, MountEntry>; impure: Map<string, string>; middleware: Set<string>; properties: string[] } {
   const { sourceFile: sf } = parseIsolated(file, code)
   const nodes = entryNodes(sf, typeFields, withRest)
   const entries = nodes.map(({ key, node }) => ({ key, file, line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1, text: normalized(node, sf) }))
@@ -157,9 +157,10 @@ export function resolverEntries(
     const inside = removed.filter(([a, b]) => a >= offset && b <= node.end)
     const outer = inside.filter(([a, b]) => !inside.some(([c, d]) => c <= a && d >= b && (c !== a || d !== b)))
     for (const [start, end] of outer.sort((a, b) => b[0] - a[0])) text = text.slice(0, start - offset) + text.slice(end - offset)
-    return stripComments(text).replace(/\s+/g, ' ').replace(/,(\s*,)+/g, ',').replace(/\{\s*,/g, '{').replace(/,\s*\}/g, '}').trim()
+    return stripComments(text, file).replace(/\s+/g, ' ').replace(/,(\s*,)+/g, ',').replace(/\{\s*,/g, '{').replace(/,\s*\}/g, '}').trim()
   }
   const items: string[] = []
+  const properties: string[] = []
   // Top-level code that is not a declaration, an inert value, a handler or a mount runs when the file loads
   // (`app.use(mw)`, `const db = connect()`): adding some is a change.
   const loadCode: string[] = []
@@ -174,6 +175,7 @@ export function resolverEntries(
     }
     for (const prop of object.properties) {
       items.push(blank(prop))
+      properties.push(blank(prop))
       if (runsCode(prop, honoNames)) loadCode.push(blank(prop))
     }
     items.push(blank(statement).replace(blank(object), '{}'))
@@ -184,18 +186,40 @@ export function resolverEntries(
   const rest = nodes.filter((n): n is RestNode => 'receiver' in n)
   const impure = new Map(rest.filter((n) => !plainChain(n.receiver) || (ts.isCallExpression(n.node) && n.node.arguments.some((a) => runsCode(a, honoNames)))).map((n) => [n.key, registrationText(n, sf)]))
   const middleware = new Set(rest.filter(middlewareLike).map((n) => n.key))
-  return { entries: entries.sort((a, b) => compareStrings(a.key, b.key)), rest: items, loadCode, imports, mounts: new Map(mounts.map((m) => [m.id, { id: m.id, prefix: m.prefix, plain: m.plain }])), impure, middleware }
+  return { entries: entries.sort((a, b) => compareStrings(a.key, b.key)), rest: items, loadCode, imports, mounts: new Map(mounts.map((m) => [m.id, { id: m.id, prefix: m.prefix, plain: m.plain }])), impure, middleware, properties }
 }
 
-/** Code without comments (they never change behavior), tokenized with the TypeScript scanner so strings stay intact. */
-export function stripComments(code: string): string {
-  const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.Standard, code)
-  let out = ''
+/** The comments between two tokens, as ranges of `code`. */
+function commentRanges(code: string, start: number, end: number): [number, number][] {
+  const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.Standard, code, undefined, start, end - start)
+  const out: [number, number][] = []
   for (let kind = scanner.scan(); kind !== ts.SyntaxKind.EndOfFileToken; kind = scanner.scan()) {
-    if (kind === ts.SyntaxKind.SingleLineCommentTrivia || kind === ts.SyntaxKind.MultiLineCommentTrivia) continue
-    out += scanner.getTokenText()
+    if (kind === ts.SyntaxKind.SingleLineCommentTrivia || kind === ts.SyntaxKind.MultiLineCommentTrivia) out.push([scanner.getTokenStart(), scanner.getTokenEnd()])
   }
   return out
+}
+
+/**
+ * Code without comments (they never change behavior). Comments are read only between the tokens of the parsed code:
+ * `//` in a template string or a regular expression is code, and code the parser skips stays in the result.
+ */
+export function stripComments(code: string, file = 'code.ts'): string {
+  const sf = ts.createSourceFile(file, code, ts.ScriptTarget.Latest, true)
+  const comments = new Map<number, number>()
+  const visit = (node: ts.Node): void => {
+    if (ts.isJSDoc(node)) return
+    const children = node.getChildren(sf)
+    if (children.length === 0) for (const [start, end] of commentRanges(code, node.getFullStart(), node.getStart(sf))) comments.set(start, end)
+    children.forEach(visit)
+  }
+  visit(sf)
+  let out = ''
+  let at = 0
+  for (const [start, end] of [...comments].sort((a, b) => a[0] - b[0])) {
+    out += code.slice(at, start)
+    at = end
+  }
+  return out + code.slice(at)
 }
 
 /** The object literal a top-level statement defines (`const X = {…}`, `export default {…}`, `module.exports = {…}`). */
@@ -210,10 +234,13 @@ function topLevelObject(statement: ts.Statement): ts.ObjectLiteralExpression | u
 
 const isBlank = (item: string): boolean => item.replace(/;$/, '') === ''
 
-/** Whether module code items that stayed changed order: `app.use(mw)` after the routes no longer runs for them. */
-export function itemsMoved(base: readonly string[], head: readonly string[]): boolean {
+/**
+ * Whether a file with a Hono app changed in a way the item comparison calls additive: items that stayed changed order
+ * (`app.use(mw)` after the routes no longer runs for them), or an object has a new property (`use(cors(options))`).
+ */
+export function appCodeChanged(base: ReturnType<typeof resolverEntries>, head: ReturnType<typeof resolverEntries>): boolean {
   const kept = (items: readonly string[], other: readonly string[]): string[] => items.filter((i) => !isBlank(i) && other.includes(i))
-  return kept(base, head).join('\n') !== kept(head, base).join('\n')
+  return kept(base.rest, head.rest).join('\n') !== kept(head.rest, base.rest).join('\n') || head.properties.some((p) => !isBlank(p) && !base.rest.includes(p))
 }
 
 export interface ResolverChanges {

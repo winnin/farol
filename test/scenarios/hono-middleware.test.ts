@@ -202,6 +202,20 @@ describe('Hono middleware and error handlers', () => {
       })
     })
 
+    it('a new property of an options object in a file with handlers is a change', async () => {
+      await expectAffected(['GET /main', ...ALL_HONO].sort(), (repo) => { edit(repo, MAIN, "{ level: 'a' }", "{ level: 'a', extra: true }") }, (repo) => {
+        edit(repo, MAIN, "import { registerRoutes } from './http/routes'", "import { registerRoutes } from './http/routes'\nimport { requestLogger } from './http/middleware/request-logger'")
+        edit(repo, MAIN, 'registerRoutes(app)', "const opts = { level: 'a' }\napp.use('*', requestLogger(opts))\napp.get('/main', (c) => c.text('main'))\nregisterRoutes(app)")
+      })
+    })
+
+    it('an edit after // inside a template string is not a comment', async () => {
+      await expectAffected(ALL_HONO, (repo) => { edit(repo, SERVER, '//old', '//new') }, (repo) => {
+        edit(repo, SERVER, 'export function createHttpApp', "const host = 'a'\nconst url = `${host}//old`\n\nexport function createHttpApp")
+        edit(repo, SERVER, 'requestLogger()', 'requestLogger(url)')
+      })
+    })
+
     it('a comment in a file that holds an app changes nothing', async () => {
       const o = await analyze((repo) => { edit(repo, SERVER, 'export function createHttpApp', '// builds the app\nexport function createHttpApp') })
       expect(o.classification).toBe('isolated')

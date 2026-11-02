@@ -16678,7 +16678,7 @@ ${lanes.join("\n")}
           const paramIdx = parseTreeNode.parent.parameters.indexOf(parseTreeNode);
           const previousSibling = paramIdx > 0 ? parseTreeNode.parent.parameters[paramIdx - 1] : void 0;
           const text = sourceFile.text;
-          const commentRanges = previousSibling ? concatenate(
+          const commentRanges2 = previousSibling ? concatenate(
             // to handle
             // ... parameters, /** @internal */
             // public param: string
@@ -16699,7 +16699,7 @@ ${lanes.join("\n")}
             /*stopAtComments*/
             true
           ));
-          return some(commentRanges) && hasInternalAnnotation(last(commentRanges), sourceFile);
+          return some(commentRanges2) && hasInternalAnnotation(last(commentRanges2), sourceFile);
         }
         const leadingCommentRanges = parseTreeNode && getLeadingCommentRangesOfNode(parseTreeNode, sourceFile);
         return !!forEach(leadingCommentRanges, (range) => {
@@ -18368,9 +18368,9 @@ ${lanes.join("\n")}
         return node2.kind !== 12 ? getLeadingCommentRanges(sourceFileOfNode.text, node2.pos) : void 0;
       }
       function getJSDocCommentRanges(node2, text) {
-        const commentRanges = node2.kind === 170 || node2.kind === 169 || node2.kind === 219 || node2.kind === 220 || node2.kind === 218 || node2.kind === 261 || node2.kind === 282 ? concatenate(getTrailingCommentRanges(text, node2.pos), getLeadingCommentRanges(text, node2.pos)) : getLeadingCommentRanges(text, node2.pos);
+        const commentRanges2 = node2.kind === 170 || node2.kind === 169 || node2.kind === 219 || node2.kind === 220 || node2.kind === 218 || node2.kind === 261 || node2.kind === 282 ? concatenate(getTrailingCommentRanges(text, node2.pos), getLeadingCommentRanges(text, node2.pos)) : getLeadingCommentRanges(text, node2.pos);
         return filter(
-          commentRanges,
+          commentRanges2,
           (comment) => comment.end <= node2.end && // Due to parse errors sometime empty parameter may get comments assigned to it that end up not in parameter range
           text.charCodeAt(comment.pos + 1) === 42 && text.charCodeAt(comment.pos + 2) === 42 && text.charCodeAt(comment.pos + 3) !== 47
           /* slash */
@@ -183147,8 +183147,8 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
       function getTripleSlashReferenceCompletion(sourceFile, position, program3, host, moduleSpecifierResolutionHost) {
         const compilerOptions = program3.getCompilerOptions();
         const token = getTokenAtPosition(sourceFile, position);
-        const commentRanges = getLeadingCommentRanges(sourceFile.text, token.pos);
-        const range = commentRanges && find(commentRanges, (commentRange) => position >= commentRange.pos && position <= commentRange.end);
+        const commentRanges2 = getLeadingCommentRanges(sourceFile.text, token.pos);
+        const range = commentRanges2 && find(commentRanges2, (commentRange) => position >= commentRange.pos && position <= commentRange.end);
         if (!range) {
           return void 0;
         }
@@ -195537,8 +195537,8 @@ ${options.prefix}` : "\n" : options.prefix
         precedingToken = precedingToken === null ? void 0 : precedingToken === void 0 ? findPrecedingToken(position, sourceFile) : precedingToken;
         const trailingRangesOfPreviousToken = precedingToken && getTrailingCommentRanges(sourceFile.text, precedingToken.end);
         const leadingCommentRangesOfNextToken = getLeadingCommentRangesOfNode(tokenAtPosition, sourceFile);
-        const commentRanges = concatenate(trailingRangesOfPreviousToken, leadingCommentRangesOfNextToken);
-        return commentRanges && find(commentRanges, (range) => rangeContainsPositionExclusive(range, position) || // The end marker of a single-line comment does not include the newline character.
+        const commentRanges2 = concatenate(trailingRangesOfPreviousToken, leadingCommentRangesOfNextToken);
+        return commentRanges2 && find(commentRanges2, (range) => rangeContainsPositionExclusive(range, position) || // The end marker of a single-line comment does not include the newline character.
         // With caret at `^`, in the following case, we are inside a comment (^ denotes the cursor position):
         //
         //    // asdf   ^\n
@@ -249243,9 +249243,10 @@ function resolverEntries(file2, code2, typeFields, withRest = true, hono = false
     const inside = removed.filter(([a, b]) => a >= offset && b <= node2.end);
     const outer = inside.filter(([a, b]) => !inside.some(([c, d]) => c <= a && d >= b && (c !== a || d !== b)));
     for (const [start, end] of outer.sort((a, b) => b[0] - a[0])) text = text.slice(0, start - offset) + text.slice(end - offset);
-    return stripComments(text).replace(/\s+/g, " ").replace(/,(\s*,)+/g, ",").replace(/\{\s*,/g, "{").replace(/,\s*\}/g, "}").trim();
+    return stripComments(text, file2).replace(/\s+/g, " ").replace(/,(\s*,)+/g, ",").replace(/\{\s*,/g, "{").replace(/,\s*\}/g, "}").trim();
   };
   const items = [];
+  const properties = [];
   const loadCode = [];
   for (const statement of sf.statements) {
     if (import_typescript11.default.isImportDeclaration(statement)) continue;
@@ -249258,6 +249259,7 @@ function resolverEntries(file2, code2, typeFields, withRest = true, hono = false
     }
     for (const prop of object2.properties) {
       items.push(blank(prop));
+      properties.push(blank(prop));
       if (runsCode(prop, honoNames)) loadCode.push(blank(prop));
     }
     items.push(blank(statement).replace(blank(object2), "{}"));
@@ -249265,16 +249267,33 @@ function resolverEntries(file2, code2, typeFields, withRest = true, hono = false
   const rest = nodes.filter((n) => "receiver" in n);
   const impure = new Map(rest.filter((n) => !plainChain(n.receiver) || import_typescript11.default.isCallExpression(n.node) && n.node.arguments.some((a) => runsCode(a, honoNames))).map((n) => [n.key, registrationText(n, sf)]));
   const middleware = new Set(rest.filter(middlewareLike).map((n) => n.key));
-  return { entries: entries.sort((a, b) => compareStrings(a.key, b.key)), rest: items, loadCode, imports, mounts: new Map(mounts.map((m) => [m.id, { id: m.id, prefix: m.prefix, plain: m.plain }])), impure, middleware };
+  return { entries: entries.sort((a, b) => compareStrings(a.key, b.key)), rest: items, loadCode, imports, mounts: new Map(mounts.map((m) => [m.id, { id: m.id, prefix: m.prefix, plain: m.plain }])), impure, middleware, properties };
 }
-function stripComments(code2) {
-  const scanner = import_typescript11.default.createScanner(import_typescript11.default.ScriptTarget.Latest, false, import_typescript11.default.LanguageVariant.Standard, code2);
-  let out = "";
+function commentRanges(code2, start, end) {
+  const scanner = import_typescript11.default.createScanner(import_typescript11.default.ScriptTarget.Latest, false, import_typescript11.default.LanguageVariant.Standard, code2, void 0, start, end - start);
+  const out = [];
   for (let kind = scanner.scan(); kind !== import_typescript11.default.SyntaxKind.EndOfFileToken; kind = scanner.scan()) {
-    if (kind === import_typescript11.default.SyntaxKind.SingleLineCommentTrivia || kind === import_typescript11.default.SyntaxKind.MultiLineCommentTrivia) continue;
-    out += scanner.getTokenText();
+    if (kind === import_typescript11.default.SyntaxKind.SingleLineCommentTrivia || kind === import_typescript11.default.SyntaxKind.MultiLineCommentTrivia) out.push([scanner.getTokenStart(), scanner.getTokenEnd()]);
   }
   return out;
+}
+function stripComments(code2, file2 = "code.ts") {
+  const sf = import_typescript11.default.createSourceFile(file2, code2, import_typescript11.default.ScriptTarget.Latest, true);
+  const comments = /* @__PURE__ */ new Map();
+  const visit3 = (node2) => {
+    if (import_typescript11.default.isJSDoc(node2)) return;
+    const children = node2.getChildren(sf);
+    if (children.length === 0) for (const [start, end] of commentRanges(code2, node2.getFullStart(), node2.getStart(sf))) comments.set(start, end);
+    children.forEach(visit3);
+  };
+  visit3(sf);
+  let out = "";
+  let at = 0;
+  for (const [start, end] of [...comments].sort((a, b) => a[0] - b[0])) {
+    out += code2.slice(at, start);
+    at = end;
+  }
+  return out + code2.slice(at);
 }
 function topLevelObject(statement) {
   let value;
@@ -249285,9 +249304,9 @@ function topLevelObject(statement) {
   return inner && import_typescript11.default.isObjectLiteralExpression(inner) ? inner : void 0;
 }
 var isBlank = (item) => item.replace(/;$/, "") === "";
-function itemsMoved(base, head) {
+function appCodeChanged(base, head) {
   const kept = (items, other) => items.filter((i) => !isBlank(i) && other.includes(i));
-  return kept(base, head).join("\n") !== kept(head, base).join("\n");
+  return kept(base.rest, head.rest).join("\n") !== kept(head.rest, base.rest).join("\n") || head.properties.some((p) => !isBlank(p) && !base.rest.includes(p));
 }
 function diffResolvers(base, head) {
   const before = new Map(base.entries.map((e) => [e.key, e.text]));
@@ -249606,8 +249625,8 @@ async function backendImpacts(ctx, table3, files, roleOf, baseSha, headSha) {
       const h = resolverEntries(f.path, after, table3.typeFields, ctx.config.backend.rest, hono);
       if (roleOf(f.path) === "resolvers" || appFiles.has(f.path) || b.entries.length + h.entries.length + b.mounts.size + h.mounts.size > 0) {
         const diff2 = diffResolvers(b, h);
-        const sourceEdit = roleOf(f.path) === "source" && stripComments(before).replace(/\s+/g, " ") !== stripComments(after).replace(/\s+/g, " ");
-        const moved = sourceEdit || appFiles.has(f.path) && itemsMoved(b.rest, h.rest);
+        const sourceEdit = roleOf(f.path) === "source" && stripComments(before, f.path).replace(/\s+/g, " ") !== stripComments(after, f.path).replace(/\s+/g, " ");
+        const moved = sourceEdit || appFiles.has(f.path) && appCodeChanged(b, h);
         const reaches = appFiles.has(f.path) || table3.honoFiles.has(f.path) && b.middleware.size + h.middleware.size > 0;
         resolvers = { ...diff2, restChanged: diff2.restChanged || moved, wide: diff2.wide || moved, keys: [...new Set([...b.entries, ...h.entries].map((e) => e.key))], reachKeys: reaches ? table3.fileReachKeys(f.path) : [] };
       }
