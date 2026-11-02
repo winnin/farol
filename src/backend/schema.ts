@@ -17,7 +17,7 @@ export interface SdlProblem {
   detail: string
 }
 
-const GQL_TAGS = new Set(['gql', 'graphql'])
+export const GQL_TAGS: ReadonlySet<string> = new Set(['gql', 'graphql'])
 
 /** SDL sources of a file: the whole file for .graphql/.gql, every gql`…`/graphql`…` template otherwise. */
 export function sdlSources(file: string, code: string): { sources: SdlSource[]; problems: SdlProblem[] } {

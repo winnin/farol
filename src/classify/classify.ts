@@ -5,7 +5,7 @@ import type { AddedRoute, AffectedRoute, Dependencies, OutputFile, UnresolvedImp
 import type { ImportGraph, ParseError } from '../project/graph.js'
 import { KEY_SEPARATOR } from '../routes/paths.js'
 import type { DynamicRoute, RouteEntry, RouteTable } from '../routes/types.js'
-import { checkBarrelAdditive, checkI18nAdditive, compareRouteTables, JsonParseError, unexplainedRemovedLines } from './additive.js'
+import { checkBarrelAdditive, checkI18nAdditive, compareRouteTables, JsonParseError, losesTokens, unexplainedRemovedLines } from './additive.js'
 import { createReachIndex, reachFrom, routesReaching, type ReachIndex } from './reach.js'
 import { classificationFrom, reason, REASONS, sortReasons, type Classification, type Reason } from './reasons.js'
 import type { AnalysisRole } from './roles.js'
@@ -244,7 +244,7 @@ export function classify(input: ClassifyInput): ClassifyResult {
     // Modified existing file: only routes, barrel and i18n files can be additive.
     const declImpact = role === 'source' ? impactOf(file.path) : undefined
     if (declImpact) {
-      // Declaration-level impact (Go): only changed or removed declarations count, with the entry points they reach.
+      // Declaration-level impact (Go, Python, TypeScript files that hold a Hono app): only changed or removed declarations count, with the entry points they reach.
       out.additive = declImpact.additive
       if (declImpact.additive) {
         const list = (items: readonly string[]): string => `${items.slice(0, 8).join(', ')}${items.length > 8 ? ', …' : ''}`
@@ -265,6 +265,7 @@ export function classify(input: ClassifyInput): ClassifyResult {
         if (problems.length > 0) reasons.push(n > 0 ? reason('existing-file-modified', `${what}: reached by ${n} existing ${entryWord}(s): ${[...declImpact.affected.keys()].slice(0, 3).join('; ')}${n > 3 ? `; and ${n - 3} more` : ''}`, file.path) : reason('existing-file-unreachable', `${what}; no ${entryWord} reaches it`, file.path))
       }
       addImpact(file.path)
+      if (!declImpact.additive && declImpact.keepsReach) reachTargets.push({ path: file.path, reportModified: false })
       continue
     }
     if ((role === 'schema' || role === 'resolvers') && input.backend) {
@@ -283,8 +284,10 @@ export function classify(input: ClassifyInput): ClassifyResult {
       const headText = input.headText.get(file.path)
       if (baseText === undefined || headText === undefined) throw new Error(`internal: missing base or head content of ${file.path}`)
       const removedLines = unexplainedRemovedLines(file.path, baseText, headText, file.removed.map((l) => l.line))
-      out.additive = tableChanges.length === 0 && removedLines.length === 0
+      const lostCode = removedLines.length === 0 && losesTokens(file.path, baseText, headText)
+      out.additive = tableChanges.length === 0 && removedLines.length === 0 && !lostCode
       if (removedLines.length > 0) reasons.push(reason('routes-not-additive', `${removedLines.length} line(s) removed (line ${removedLines.join(', ')} of the base)`, file.path))
+      if (lostCode) reasons.push(reason('routes-not-additive', 'code of the base is gone though no line was removed (a string, JSX text, or code on an import line)', file.path))
       if (out.additive) reasons.push(reason('routes-additive', 'every existing route is unchanged and no line was removed', file.path))
       continue
     }

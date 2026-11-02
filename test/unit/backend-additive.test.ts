@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildBackendTable } from '../../src/backend/entrypoints.js'
-import { mountNodes, overlaps } from '../../src/backend/hono.js'
+import { mountNodes } from '../../src/backend/hono.js'
+import { overlaps } from '../../src/backend/hono-paths.js'
 import { mountImpacts } from '../../src/backend/impact.js'
 import { diffResolvers, resolverEntries } from '../../src/backend/resolvers.js'
 import { parseIsolated } from '../../src/project/parse.js'

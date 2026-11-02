@@ -161,4 +161,4 @@ Milestones from `docs/SPEC.md`. Each one is done only when its acceptance criter
 - Context injection needs `backend.context`; without it, files reached only through `context.loaders` are "unreachable" (still `touches-existing`).
 - Across modules the unit is the module (an operation using one function of a service is affected by a change to another function of it).
 - An operation reaches every type it can return, so broad return types (User, Workspace…) make many operations "affected" by changes deep in the type graph.
-- REST prefixes from `register`/`use` are not applied (Express, Fastify). Hono `route()` prefixes are (CHA-14806, DECISIONS 2026-10-29): one endpoint per mount, checked on empwr-platform assess (45 endpoints, 31 keys before, 0 `dynamic-route`).
+- REST prefixes from `register`/`use` are not applied (Express, Fastify). Hono `route()` prefixes are (CHA-14806, DECISIONS 2026-10-29): one endpoint per mount, checked on empwr-platform assess (45 endpoints, 31 keys before, 0 `dynamic-route`).  Hono middleware and error handlers are placed on the endpoints that run them (CHA-14808, DECISIONS 2026-10-30).

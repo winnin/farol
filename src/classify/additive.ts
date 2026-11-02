@@ -1,6 +1,6 @@
 import ts from 'typescript'
 import { isDeepStrictEqual } from 'node:util'
-import { parseIsolated } from '../project/parse.js'
+import { codeTokens, parseIsolated } from '../project/parse.js'
 import type { RouteEntry, RouteTable } from '../routes/types.js'
 
 export interface AdditiveResult {
@@ -86,6 +86,25 @@ export function unexplainedRemovedLines(file: string, baseCode: string, headCode
     for (let line = first; line <= last; line++) explained.add(line)
   }
   return removed.filter((line) => !explained.has(line))
+}
+
+/**
+ * Whether the head lost code of the base outside its imports: every token of the base must still be there, in order.
+ * A changed token can hide in lines that differ only by spaces, such as a string.
+ */
+export function losesTokens(file: string, baseCode: string, headCode: string): boolean {
+  const tokens = (code: string): string[] => {
+    const { sourceFile: sf } = parseIsolated(file, code)
+    return sf.statements.filter((s) => !ts.isImportDeclaration(s)).flatMap((s) => codeTokens(s, sf))
+  }
+  const head = tokens(headCode)
+  let at = 0
+  for (const token of tokens(baseCode)) {
+    while (at < head.length && head[at] !== token) at++
+    if (at === head.length) return true
+    at++
+  }
+  return false
 }
 
 function normalizedText(node: ts.Node, sf: ts.SourceFile): string {

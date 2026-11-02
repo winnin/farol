@@ -6,7 +6,8 @@ import { isProjectPath } from '../project/fs.js'
 import type { ProjectProgram } from '../project/program.js'
 import type { DynamicRoute, RouteEntry } from '../routes/types.js'
 import { definedGlobals, usesGlobal } from './globals.js'
-import { honoApps, prefixKey, UNRESOLVED_APP } from './hono.js'
+import { honoApps, UNRESOLVED_APP } from './hono.js'
+import { keyPath, prefixKey, underPath } from './hono-paths.js'
 import { restAnchor } from './rest.js'
 import { ENUM_MARKER, entryNodes, resolverAnchors } from './resolvers.js'
 import picomatch from 'picomatch'
@@ -49,6 +50,10 @@ export interface BackendTable {
   mountKeys: (id: string) => string[]
   /** Files that use Hono: their mounts are compared even without a hono import. */
   honoFiles: Set<string>
+  /** Endpoints a change to a file's module code can hit: those under its Hono apps (no app: every Hono endpoint), and those using the file. */
+  fileReachKeys: (file: string) => string[]
+  /** Whether a file of the head creates, receives, holds or registers on a Hono app. */
+  fileHoldsApp: (file: string) => boolean
 }
 
 export interface BackendInput {
@@ -124,6 +129,27 @@ export function buildBackendTable(input: BackendInput): BackendTable {
   }
   // Resolvers and REST handlers, with the modules their code uses.
   const checker = input.project.program.getTypeChecker()
+  const anchorsOf = (node: ts.Node): string[] => resolverAnchors(node, checker, isProjectFile, rel, globals, contextOf)
+  // REST handlers and middleware are often held in a variable of the same file (`const mw = create()`, `const { mw } = build()`).
+  const argumentModules = (arg: ts.Node): string[] => {
+    const own = arg.getSourceFile()
+    const followed = new Set<ts.Node>([arg])
+    const visit = (node: ts.Node): void => {
+      if (ts.isIdentifier(node)) {
+        const symbol = ts.isShorthandPropertyAssignment(node.parent) ? checker.getShorthandAssignmentValueSymbol(node.parent) : checker.getSymbolAtLocation(node)
+        let decl: ts.Node | undefined = symbol?.valueDeclaration
+        while (decl && ts.isBindingElement(decl)) decl = decl.parent.parent
+        const code = decl && ts.isVariableDeclaration(decl) ? decl.initializer : decl && ts.isFunctionDeclaration(decl) ? decl : undefined
+        if (code && code.getSourceFile() === own && !followed.has(code)) {
+          followed.add(code)
+          visit(code)
+        }
+      }
+      ts.forEachChild(node, visit)
+    }
+    visit(arg)
+    return [...followed].flatMap(anchorsOf)
+  }
   const anchors = new Map<string, { file: string; modules: Set<string> }>()
   const handlers: { anchor: string; key: string; receiver: ts.Expression; node: ts.Node }[] = []
   const resolverFiles = new Set<string>()
@@ -134,7 +160,8 @@ export function buildBackendTable(input: BackendInput): BackendTable {
       const id = 'receiver' in entry ? restAnchor(file, entry.key) : entry.key
       if ('receiver' in entry) handlers.push({ anchor: id, key: entry.key, receiver: entry.receiver, node: entry.node })
       const anchor = anchors.get(id) ?? { file, modules: new Set<string>() }
-      for (const m of resolverAnchors(entry.value, checker, isProjectFile, rel, globals, contextOf)) if (m !== file) anchor.modules.add(m)
+      for (const m of 'receiver' in entry ? argumentModules(entry.value) : anchorsOf(entry.value)) if (m !== file) anchor.modules.add(m)
+      for (const guard of 'receiver' in entry ? entry.guards : []) for (const m of argumentModules(guard)) if (m !== file) anchor.modules.add(m)
       anchors.set(id, anchor)
     }
   }
@@ -151,6 +178,9 @@ export function buildBackendTable(input: BackendInput): BackendTable {
     }
     return out
   }
+  // Middleware runs for the endpoints of Hono apps under its full paths; Express and Fastify paths are as written.
+  const honoKeys = new Set(handlers.flatMap((h) => (hono?.basesOf(h.receiver) ?? []).map((b) => prefixKey(h.key, b))))
+  const registrations = (hono?.registrations ?? []).map((reg) => ({ paths: reg.paths, modules: reg.args.flatMap(argumentModules) }))
   const dynamic = [...(hono?.dynamic ?? [])]
   for (const h of handlers) {
     const bases = hono?.basesOf(h.receiver)
@@ -177,7 +207,8 @@ export function buildBackendTable(input: BackendInput): BackendTable {
   }
   for (const [key, ids] of restKeys()) {
     resolverKeys.set(key, ids)
-    entries.push({ key, path: key, index: false, entry: null, modules: sortedUnique([...ids].flatMap((id) => [...(anchors.get(id)?.modules ?? [])])), layouts: [] })
+    const installed = honoKeys.has(key) ? registrations.filter((reg) => reg.paths.some((p) => underPath(keyPath(key), p))).flatMap((reg) => reg.modules) : []
+    entries.push({ key, path: key, index: false, entry: null, modules: sortedUnique([...[...ids].flatMap((id) => [...(anchors.get(id)?.modules ?? [])]), ...installed]), layouts: [] })
   }
   entries.sort((a, b) => compareStrings(a.key, b.key))
   return {
@@ -198,6 +229,12 @@ export function buildBackendTable(input: BackendInput): BackendTable {
     mountMiddleware: (id) => hono?.mountMiddleware(id) ?? false,
     mountKeys: (id) => sortedUnique(handlers.flatMap((h) => (hono?.basesThrough(h.receiver, id) ?? []).map((b) => prefixKey(h.key, b)))),
     honoFiles: hono?.honoFiles ?? new Set(),
+    fileHoldsApp: (file) => (hono?.fileBases(file) ?? []).length > 0,
+    fileReachKeys: (file) => {
+      const bases = hono?.fileBases(file) ?? []
+      const under = [...honoKeys].filter((k) => bases.length === 0 || bases.some((b) => underPath(keyPath(k), b)))
+      return sortedUnique([...under, ...entries.filter((e) => e.modules.includes(file)).map((e) => e.key)])
+    },
   }
 }
 
