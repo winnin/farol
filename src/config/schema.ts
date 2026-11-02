@@ -103,6 +103,11 @@ export const ConfigSchema = z
          * uses the provider file whose directory or name matches `Brand`, or every provider when none matches.
          */
         context: z.record(z.string().min(1), globs).default({}),
+        /**
+         * Files that run outside HTTP and GraphQL (Kafka handlers, cron jobs, gRPC services, scripts), by kind. Each
+         * matching file is one entry point, `<KIND> <repo-relative file>`, that runs the code the file uses.
+         */
+        entries: z.partialRecord(z.enum(['JOB', 'CONSUMER', 'RPC', 'RUN']), globs).default({}),
       })
       .strict()
       .prefault({}),
@@ -165,6 +170,7 @@ export const ConfigSchema = z
   .superRefine((config, ctx) => {
     if (config.language !== 'typescript' && config.surface !== 'backend') ctx.addIssue({ code: 'custom', path: ['surface'], message: `a ${config.language === 'go' ? 'Go' : 'Python'} project is a backend: set "surface": "backend"` })
     if (config.language !== 'typescript' && config.generated.length > 0) ctx.addIssue({ code: 'custom', path: ['generated'], message: 'only TypeScript projects read generated import targets: remove it' })
+    if ((config.language !== 'typescript' || config.surface !== 'backend') && Object.keys(config.backend.entries).length > 0) ctx.addIssue({ code: 'custom', path: ['backend', 'entries'], message: 'only TypeScript backends read entry points from the configuration' })
     if (config.surface === 'frontend' && config.routes === undefined) ctx.addIssue({ code: 'custom', path: ['routes'], message: 'routes is required for a frontend (routes.file for React Router, or routes.adapter "next" / "tanstack-router"), or set "surface": "backend"' })
   })
   // A backend has no routes file: an empty one keeps the rest of the code uniform.

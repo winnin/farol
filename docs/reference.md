@@ -91,6 +91,7 @@ A complete example is in [examples/.farol.json](../examples/.farol.json).
 | `routes.extraFiles` | `[]` | `react-router`: modules that **only** define routes (split route trees). |
 | `backend.graphql` / `backend.rest` | `true` | TypeScript backends: read GraphQL schemas and resolvers / REST registrations (Hono `route()` prefixes applied). |
 | `backend.context` | `{}` | TypeScript backends: values injected at runtime, as context property → provider files. For example, `"loaders"` makes `loaders.Brand.byId()` use the provider whose name matches `Brand`. |
+| `backend.entries` | `{}` | TypeScript backends: files that run outside HTTP and GraphQL, as kind (`JOB`, `CONSUMER`, `RPC`, `RUN`) → file globs. Each matching file is one entry point, `JOB src/jobs/drain.job.ts`, that runs the code the file uses. For example, `{ "CONSUMER": ["src/consumers/*.handler.ts"], "JOB": ["src/jobs/*.job.ts"] }`. Use a glob that leaves out barrels (`*.job.ts`, not `*.ts`). Check the list with `farol routes`: a glob that matches nothing gives no error. |
 | `python.roots` | `["src", "."]` | Python import roots (`src` for a src layout). |
 | `exclude` | `[]` (Go: generated mocks) | Files left out of the analysis, still listed. |
 | `ignore` | `[]` | Changed files left out of **everything**: classification, dependencies, signals. |

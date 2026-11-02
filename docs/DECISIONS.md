@@ -932,3 +932,15 @@ Every decision not covered by `docs/SPEC.md`. One entry per decision: problem, o
 - **Binding elements:** `const { reg } = fns` with `reg` passed an app still loses the mount above it (the path is the one written, the class is unchanged).
 - **Copilot on pass 5:** a comma after a last hole of an array counts (`[,]` is not `[]`). Only spaces and tabs are JSX indent: compilers differ on a non-breaking space at the end of a line, so removing one is a change. A property of an imported module that can change (`export let`) is a dynamic route. A guard in a shorthand property reaches what its variable uses. `/files/:name?` covers `/files`.
 - **Reason:** CHA-14808 (A2 of the assess support).
+
+## 2026-11-02 — Non-HTTP entry points of TypeScript backends come from the configuration
+
+- **Problem:** assess runs code from Kafka handlers, cron jobs, gRPC services and scripts. A change to code only these run gave `touches-existing` and listed no entry point.
+- **Options:** detect `addService`, topic maps and schedulers in the code; or name the files in the configuration.
+- **Choice:** the configuration: `backend.entries`, kind (`JOB`, `CONSUMER`, `RPC`, `RUN`) → globs. Each matching program file is one entry point. Detection can come later. Other languages and frontends reject the key, because they would ignore it.
+- **Reach:** an entry point runs the modules its file names, found with the type checker as for REST handlers, then value imports from there. The import graph alone is not enough: assess handlers `import type` their use case and call its method. Measured on assess: of 145 source files with no entry point, the graph connects 15 and these anchors 24 (56 with experiment scripts).
+- **Names (differs from the ticket):** keys use the repo-relative file (`CONSUMER src/a.handler.ts`), not `CONSUMER <topic>` or `RPC <svc>/<method>`. Topics are runtime values in assess, one handler serves many, and a name in the configuration can go stale. `RUN <file>` in Python already works this way.
+- **New or existing:** an entry point is new only when the PR adds its file. A renamed file stays an existing entry point, so the code it reaches is never read as "reached only by a new route".
+- **A glob that matches nothing is not an error:** with no entry point, a changed file still gets `touches-existing`, so no class is wrong and only the list is empty, as before. A check would make a PR that deletes the last job, or an old commit, `unknown` or a failure. `farol routes` shows the list.
+- **Limits, not changed:** one hop through a class imported as a type. Interfaces and inline types stop reach (CHA-14809 covers `implements`). A file with the role `resolvers` or `schema` skips reach, so an entry point that reaches one is not listed for its changes, and the class stays right. A deleted entry file gives `existing-file-deleted`, and no reason names the entry point. Topics and `.proto` files are not read.
+- **Reason:** CHA-14810 (A5 of the assess support).

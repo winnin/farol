@@ -68,6 +68,8 @@ export interface BackendInput {
   rest: boolean
   /** Context properties → provider file globs (repo-relative). */
   context: Readonly<Record<string, readonly string[]>>
+  /** Entry point kinds → globs of the files that are entry points (repo-relative). */
+  entries: Readonly<Record<string, readonly string[]>>
 }
 
 export function buildBackendTable(input: BackendInput): BackendTable {
@@ -209,6 +211,14 @@ export function buildBackendTable(input: BackendInput): BackendTable {
     resolverKeys.set(key, ids)
     const installed = honoKeys.has(key) ? registrations.filter((reg) => reg.paths.some((p) => underPath(keyPath(key), p))).flatMap((reg) => reg.modules) : []
     entries.push({ key, path: key, index: false, entry: null, modules: sortedUnique([...[...ids].flatMap((id) => [...(anchors.get(id)?.modules ?? [])]), ...installed]), layouts: [] })
+  }
+  // Files the configuration names: each one runs the code it uses. `entry` is set only on these.
+  for (const [kind, globs] of Object.entries(input.entries)) {
+    const match = picomatch([...globs], { dot: true })
+    for (const sf of programFiles) {
+      const file = rel(sf.fileName)
+      if (match(file)) entries.push({ key: `${kind} ${file}`, path: `${kind} ${file}`, index: false, entry: file, modules: anchorsOf(sf).filter((m) => m !== file), layouts: [] })
+    }
   }
   entries.sort((a, b) => compareStrings(a.key, b.key))
   return {

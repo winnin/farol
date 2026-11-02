@@ -9,7 +9,7 @@ import { isScriptFile } from '../classify/declarations-only.js'
 import type { AnalysisRole } from '../classify/roles.js'
 import { readFiles } from '../git/index.js'
 import type { ChangedFile } from '../git/types.js'
-import type { RouteTable } from '../routes/types.js'
+import type { RouteEntry, RouteTable } from '../routes/types.js'
 import type { Context } from './context.js'
 import { graphqlContractChanges, type EntryContractChange } from '../contracts/graphql.js'
 
@@ -77,7 +77,10 @@ export async function backendImpacts(
     }
   }
   const baseRest = table.restKeysWithout(new Set(addedMounts.map((m) => m.id)), addedAnchors)
-  const baseRoutes = table.operations.filter((r) => (r.key.includes(' ') ? baseRest.has(r.key) : !addedOperations.has(r.key)))
+  const addedFiles = new Set(files.filter((f) => f.status === 'added').map((f) => f.path))
+  // An entry point named in the configuration is new only with its file: a renamed file stays an existing one.
+  const inBase = (r: RouteEntry): boolean => (r.entry !== null ? !addedFiles.has(r.entry) : r.key.includes(' ') ? baseRest.has(r.key) : !addedOperations.has(r.key))
+  const baseRoutes = table.operations.filter(inBase)
   return { impacts: mountImpacts(table, addedMounts, baseRest, duplicateEndpoints(impacts, baseRest)), baseRoutes: { routes: baseRoutes, dynamic: [], sources: [] }, contracts: await schemaContracts(ctx, table, files, baseSha) }
 }
 

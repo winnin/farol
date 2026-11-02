@@ -36,4 +36,17 @@ describe('manual test checklist', () => {
     expect(moduleOf({ ...front, surface: 'backend' }, 'orders_api GET /orders')).toBe('orders_api GET')
     expect(moduleOf({ ...front, surface: 'backend' }, 'Query.brand')).toBe('Query')
   })
+
+  it('groups entry points named by a file under their kind', () => {
+    const backend = { ...golden('05-shared-component'), surface: 'backend' as const }
+    expect(moduleOf(backend, 'JOB src/jobs/drain.job.ts')).toBe('JOB')
+    expect(moduleOf(backend, 'CONSUMER src/consumers/signal.handler.ts')).toBe('CONSUMER')
+    expect(moduleOf(backend, 'RPC src/rpc/brands.rpc.ts')).toBe('RPC')
+    expect(moduleOf(backend, 'RUN src/scripts/seed.ts')).toBe('RUN')
+  })
+
+  it('keeps gRPC methods of a Go service under their service', () => {
+    const backend = { ...golden('05-shared-component'), surface: 'backend' as const }
+    expect(moduleOf(backend, 'RPC brandspb.Brands/GetBrand')).toBe('RPC /brandspb.Brands')
+  })
 })

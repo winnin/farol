@@ -1,0 +1,5 @@
+{
+  "surface": "backend",
+  "backend": { "entries": { "CONSUMER": ["src/consumers/*.handler.ts"] } },
+  "roles": { "test": ["**/*.test.ts"], "global": ["package.json", "tsconfig*.json", "src/app.ts"] }
+}

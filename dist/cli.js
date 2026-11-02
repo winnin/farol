@@ -236552,7 +236552,12 @@ var ConfigSchema = external_exports.object({
      * that provide them, e.g. "loaders" → the loader registries of each module. A resolver reading `loaders.Brand…`
      * uses the provider file whose directory or name matches `Brand`, or every provider when none matches.
      */
-    context: external_exports.record(external_exports.string().min(1), globs).default({})
+    context: external_exports.record(external_exports.string().min(1), globs).default({}),
+    /**
+     * Files that run outside HTTP and GraphQL (Kafka handlers, cron jobs, gRPC services, scripts), by kind. Each
+     * matching file is one entry point, `<KIND> <repo-relative file>`, that runs the code the file uses.
+     */
+    entries: external_exports.partialRecord(external_exports.enum(["JOB", "CONSUMER", "RPC", "RUN"]), globs).default({})
   }).strict().prefault({}),
   routes: external_exports.object({
     /** react-router: a route table in `file`. next, tanstack-router: file-system routing under `dir`. */
@@ -236600,6 +236605,7 @@ var ConfigSchema = external_exports.object({
 }).strict().superRefine((config2, ctx) => {
   if (config2.language !== "typescript" && config2.surface !== "backend") ctx.addIssue({ code: "custom", path: ["surface"], message: `a ${config2.language === "go" ? "Go" : "Python"} project is a backend: set "surface": "backend"` });
   if (config2.language !== "typescript" && config2.generated.length > 0) ctx.addIssue({ code: "custom", path: ["generated"], message: "only TypeScript projects read generated import targets: remove it" });
+  if ((config2.language !== "typescript" || config2.surface !== "backend") && Object.keys(config2.backend.entries).length > 0) ctx.addIssue({ code: "custom", path: ["backend", "entries"], message: "only TypeScript backends read entry points from the configuration" });
   if (config2.surface === "frontend" && config2.routes === void 0) ctx.addIssue({ code: "custom", path: ["routes"], message: 'routes is required for a frontend (routes.file for React Router, or routes.adapter "next" / "tanstack-router"), or set "surface": "backend"' });
 }).transform((config2) => ({
   ...config2,
@@ -249806,7 +249812,9 @@ async function backendImpacts(ctx, table3, files, roleOf, baseSha, headSha) {
     }
   }
   const baseRest = table3.restKeysWithout(new Set(addedMounts.map((m) => m.id)), addedAnchors);
-  const baseRoutes = table3.operations.filter((r) => r.key.includes(" ") ? baseRest.has(r.key) : !addedOperations.has(r.key));
+  const addedFiles = new Set(files.filter((f) => f.status === "added").map((f) => f.path));
+  const inBase = (r) => r.entry !== null ? !addedFiles.has(r.entry) : r.key.includes(" ") ? baseRest.has(r.key) : !addedOperations.has(r.key);
+  const baseRoutes = table3.operations.filter(inBase);
   return { impacts: mountImpacts(table3, addedMounts, baseRest, duplicateEndpoints(impacts, baseRest)), baseRoutes: { routes: baseRoutes, dynamic: [], sources: [] }, contracts: await schemaContracts(ctx, table3, files, baseSha) };
 }
 async function schemaContracts(ctx, table3, files, baseSha) {
@@ -250526,6 +250534,13 @@ function buildBackendTable(input2) {
     resolverKeys.set(key, ids);
     const installed = honoKeys.has(key) ? registrations.filter((reg) => reg.paths.some((p) => underPath(keyPath(key), p))).flatMap((reg) => reg.modules) : [];
     entries.push({ key, path: key, index: false, entry: null, modules: sortedUnique([...[...ids].flatMap((id) => [...anchors.get(id)?.modules ?? []]), ...installed]), layouts: [] });
+  }
+  for (const [kind, globs3] of Object.entries(input2.entries)) {
+    const match = (0, import_picomatch2.default)([...globs3], { dot: true });
+    for (const sf of programFiles) {
+      const file2 = rel(sf.fileName);
+      if (match(file2)) entries.push({ key: `${kind} ${file2}`, path: `${kind} ${file2}`, index: false, entry: file2, modules: anchorsOf(sf).filter((m) => m !== file2), layouts: [] });
+    }
   }
   entries.sort((a, b) => compareStrings(a.key, b.key));
   return {
@@ -251863,8 +251878,8 @@ function diskFiles(dir, repoRoot2) {
   walk(dir);
   return out;
 }
-function projectGlobs(ctx, context) {
-  return Object.fromEntries(Object.entries(context).map(([k, globs3]) => [k, globs3.map((g) => ctx.projectPrefix === "" ? g : `${ctx.projectPrefix}/${g}`)]));
+function projectGlobs(ctx, byKey) {
+  return Object.fromEntries(Object.entries(byKey).map(([k, globs3]) => [k, (globs3 ?? []).map((g) => ctx.projectPrefix === "" ? g : `${ctx.projectPrefix}/${g}`)]));
 }
 function loadBackendWorkspace(ctx, fs2, treeFiles, lap) {
   const projectDir = toPosix(ctx.projectDir);
@@ -251879,7 +251894,7 @@ function loadBackendWorkspace(ctx, fs2, treeFiles, lap) {
   const graph = buildImportGraph(project, { repoRoot: ctx.repoRoot, isOrigin: (path3) => isOrigin(path3) || roleOf(path3) === "outside" });
   lap("graph");
   const files = (treeFiles ?? diskFiles(projectDir, repoRoot2)).filter((f) => ctx.projectPrefix === "" || f.startsWith(`${ctx.projectPrefix}/`));
-  const backend = buildBackendTable({ project, repoRoot: repoRoot2, files, read: (f) => fs2.readFile(posix15.join(repoRoot2, f)), isOrigin, graphql: ctx.config.backend.graphql, rest: ctx.config.backend.rest, context: projectGlobs(ctx, ctx.config.backend.context) });
+  const backend = buildBackendTable({ project, repoRoot: repoRoot2, files, read: (f) => fs2.readFile(posix15.join(repoRoot2, f)), isOrigin, graphql: ctx.config.backend.graphql, rest: ctx.config.backend.rest, context: projectGlobs(ctx, ctx.config.backend.context), entries: projectGlobs(ctx, ctx.config.backend.entries) });
   const rel = (fileName) => posix15.relative(repoRoot2, toPosix(fileName));
   const isProjectFile = (fileName) => isProjectPath(repoRoot2, fileName);
   const extra = globalUses(project, backend.globals, rel, isProjectFile);
@@ -253414,7 +253429,8 @@ function moduleOf(o, path3) {
     if (parts.length >= 3) return `${parts[0] ?? ""} ${parts[1] ?? ""}`;
     if (parts.length === 2) {
       const first2 = (parts[1] ?? "").split("/").filter((s) => s !== "")[0];
-      return parts[0] === "RUN" ? "RUN" : `${parts[0] ?? ""} /${first2 ?? ""}`;
+      const namedByFile = parts[0] === "RUN" || isScriptFile(parts[1] ?? "");
+      return namedByFile ? parts[0] ?? "" : `${parts[0] ?? ""} /${first2 ?? ""}`;
     }
     return path3.split(".")[0] ?? path3;
   }

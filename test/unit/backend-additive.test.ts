@@ -13,7 +13,7 @@ function touchedBy(sub: string): string[] {
     'src/sub.ts': `import { Hono } from 'hono'\nexport function createSub() {\n  const routes = new Hono()\n${sub}\n  return routes\n}\n`,
     'src/main.ts': "import { Hono } from 'hono'\nimport { createSub } from './sub'\nconst app = new Hono()\napp.get('/whoami', (c) => c.text('me'))\napp.get('/items/:id', (c) => c.text(''))\napp.route('/', createSub())\n",
   }
-  const table = buildBackendTable({ project: memoryProject(files, 'src/main.ts'), repoRoot: ROOT, files: Object.keys(files), read: (f) => files[f], isOrigin: () => true, graphql: false, rest: true, context: {} })
+  const table = buildBackendTable({ project: memoryProject(files, 'src/main.ts'), repoRoot: ROOT, files: Object.keys(files), read: (f) => files[f], isOrigin: () => true, graphql: false, rest: true, context: {}, entries: {} })
   const mount = mountNodes(parseIsolated('src/main.ts', files['src/main.ts'] ?? '').sourceFile, 'src/main.ts')[0]
   if (!mount) throw new Error('no mount in main.ts')
   const baseRest = table.restKeysWithout(new Set([mount.id]), new Set())

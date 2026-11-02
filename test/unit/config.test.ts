@@ -89,6 +89,20 @@ describe('roles', () => {
   })
 })
 
+describe('backend entry points', () => {
+  it.each([
+    ['a Go project', '"language":"go","surface":"backend"'],
+    ['a Python project', '"language":"python","surface":"backend"'],
+    ['a frontend', '"routes":{"file":"src/routes.tsx"}'],
+  ])('rejects them on %s, which would ignore them', (_name, rest) => {
+    expect(() => parseConfig(`{${rest},"backend":{"entries":{"JOB":["a.ts"]}}}`, 'c')).toThrow(/backend\.entries/)
+  })
+
+  it('rejects a kind it does not know', () => {
+    expect(() => parseConfig('{"surface":"backend","backend":{"entries":{"WORKER":["a.ts"]}}}', 'c')).toThrow(/WORKER/)
+  })
+})
+
 describe('generated import targets', () => {
   const head = ['apps/api/src/lib/format.ts', 'apps/api/src/generated/.gitkeep', 'src/lib/a.ts']
 

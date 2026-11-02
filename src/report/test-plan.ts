@@ -1,4 +1,5 @@
 import { posix } from 'node:path'
+import { isScriptFile } from '../classify/declarations-only.js'
 import { compareStrings } from '../output/order.js'
 import type { Output } from '../output/schema.js'
 import { mergeScore, scoreGroups } from './merge-score.js'
@@ -29,7 +30,9 @@ export function moduleOf(o: Output, path: string): string {
     if (parts.length >= 3) return `${parts[0] ?? ''} ${parts[1] ?? ''}`
     if (parts.length === 2) {
       const first = (parts[1] ?? '').split('/').filter((s) => s !== '')[0]
-      return parts[0] === 'RUN' ? 'RUN' : `${parts[0] ?? ''} /${first ?? ''}`
+      // `RUN seed.py`, `JOB src/jobs/a.ts`: an entry point named by its file belongs to its kind.
+      const namedByFile = parts[0] === 'RUN' || isScriptFile(parts[1] ?? '')
+      return namedByFile ? (parts[0] ?? '') : `${parts[0] ?? ''} /${first ?? ''}`
     }
     return path.split('.')[0] ?? path
   }
