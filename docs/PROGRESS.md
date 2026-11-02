@@ -152,6 +152,11 @@ Milestones from `docs/SPEC.md`. Each one is done only when its acceptance criter
 - Tests: 8 backend scenarios on `test/fixtures/_base-api` (new query, service, schema type change, resolver change, context loader, global, REST, description-only).
 - Checked on a real GraphQL PR: additive schema and resolver changes recognized, reach through services and loaders, diff coverage.
 
+### Expo Router adapter — done (first version)
+- `routes.adapter: "expo-router"` (`src/routes/expo-router/`): screens, `_layout` layouts, groups, dynamic segments, `+api` routes, `+not-found`, root `+middleware`/`+native-intent`/`+html`, platform modules; what Expo Router refuses to load is a dynamic route. See DECISIONS 2026-11-02.
+- Checked on a production Expo app (228 screens and API routes, 8 layouts): no dynamic entry; on six merged PRs, changed files went from no entry point (`surface: "backend"`, the only option before) to the screens they reach. Its root `_layout` imports the i18n bundle, so a locale or provider change reaches every screen, as a Next.js root layout would.
+- Open: Expo Router `redirects`/`rewrites` from the app config are not read.
+
 ### Known limitations / open questions
 - Context injection needs `backend.context`; without it, files reached only through `context.loaders` are "unreachable" (still `touches-existing`).
 - Across modules the unit is the module (an operation using one function of a service is affected by a change to another function of it).

@@ -2,7 +2,7 @@ import { posix } from 'node:path'
 import { compareStrings } from '../output/order.js'
 import type { DynamicRoute, RouteEntry, RouteTable } from './types.js'
 
-/** Extensions of route modules in file-system routers (Next.js `pageExtensions` default, TanStack Router). */
+/** Extensions of route modules in file-system routers (Next.js `pageExtensions` default, TanStack Router, Expo Router). */
 export const ROUTE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js']
 
 /** Tests, stories, mocks and declaration files never define routes, even inside a routes directory. */
