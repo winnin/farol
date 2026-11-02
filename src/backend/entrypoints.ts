@@ -74,6 +74,9 @@ export interface BackendInput {
   entries: Readonly<Record<string, readonly string[]>>
 }
 
+/** An import or re-export runs nothing the import graph does not already follow; naming a class in one is not a use. */
+const runsCode = (statement: ts.Statement): boolean => !ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)
+
 /** Each program file a glob of `backend.entries` matches is one entry point, which runs the modules the file names. */
 function configuredEntries(byKind: BackendInput['entries'], programFiles: readonly ts.SourceFile[], rel: (fileName: string) => string, anchorsOf: (node: ts.Node) => string[]): (RouteEntry & { entry: string })[] {
   return Object.entries(byKind).flatMap(([kind, globs]) => {
@@ -81,7 +84,7 @@ function configuredEntries(byKind: BackendInput['entries'], programFiles: readon
     return programFiles.filter((sf) => match(rel(sf.fileName))).map((sf) => {
       const file = rel(sf.fileName)
       const key = `${kind} ${file}`
-      return { key, path: key, index: false, entry: file, modules: anchorsOf(sf).filter((m) => m !== file), layouts: [] }
+      return { key, path: key, index: false, entry: file, modules: sortedUnique(sf.statements.filter(runsCode).flatMap(anchorsOf)).filter((m) => m !== file), layouts: [] }
     })
   })
 }

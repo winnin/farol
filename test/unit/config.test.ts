@@ -98,8 +98,13 @@ describe('backend entry points', () => {
     expect(() => parseConfig(`{${rest},"backend":{"entries":{"JOB":["a.ts"]}}}`, 'c')).toThrow(/backend\.entries/)
   })
 
-  it.each(['../shared/jobs/*.ts', 'src/../jobs/*.ts', './src/jobs/*.ts', '!src/jobs/legacy.ts'])('rejects the glob %s, which would not match as written', (glob) => {
+  it.each(['../shared/jobs/*.ts', 'src/../jobs/*.ts', './src/jobs/*.ts', '!src/jobs/legacy.ts', 'src/{../x,a}/*.ts', '{./src/a/*.ts,src/b/*.ts}'])('rejects the glob %s, which would not match as written', (glob) => {
     expect(() => parseConfig(JSON.stringify({ surface: 'backend', backend: { entries: { JOB: [glob] } } }), 'c')).toThrow(/relative to the project/)
+  })
+
+  it.each(['!(top).ts', 'src/{a,b}/*.ts', 'src/.hidden/*.ts'])('accepts the glob %s', (glob) => {
+    const config = parseConfig(JSON.stringify({ surface: 'backend', backend: { entries: { JOB: [glob] } } }), 'c')
+    expect(config.backend.entries.JOB).toEqual([glob])
   })
 
   it('rejects a kind it does not know', () => {

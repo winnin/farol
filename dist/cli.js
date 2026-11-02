@@ -212097,7 +212097,7 @@ var require_scan = __commonJS({
       }
       let base = str2;
       let prefix = "";
-      let glob = "";
+      let glob2 = "";
       if (start > 0) {
         prefix = str2.slice(0, start);
         str2 = str2.slice(start);
@@ -212105,10 +212105,10 @@ var require_scan = __commonJS({
       }
       if (base && isGlob === true && lastIndex > 0) {
         base = str2.slice(0, lastIndex);
-        glob = str2.slice(lastIndex);
+        glob2 = str2.slice(lastIndex);
       } else if (isGlob === true) {
         base = "";
-        glob = str2;
+        glob2 = str2;
       } else {
         base = str2;
       }
@@ -212118,7 +212118,7 @@ var require_scan = __commonJS({
         }
       }
       if (opts.unescape === true) {
-        if (glob) glob = utils.removeBackslashes(glob);
+        if (glob2) glob2 = utils.removeBackslashes(glob2);
         if (base && backslashes === true) {
           base = utils.removeBackslashes(base);
         }
@@ -212128,7 +212128,7 @@ var require_scan = __commonJS({
         input: input2,
         start,
         base,
-        glob,
+        glob: glob2,
         isBrace,
         isBracket,
         isGlob,
@@ -213206,9 +213206,9 @@ var require_picomatch = __commonJS({
     var utils = require_utils();
     var constants = require_constants();
     var isObject2 = (val) => val && typeof val === "object" && !Array.isArray(val);
-    var picomatch4 = (glob, options, returnState = false) => {
-      if (Array.isArray(glob)) {
-        const fns = glob.map((input2) => picomatch4(input2, options, returnState));
+    var picomatch4 = (glob2, options, returnState = false) => {
+      if (Array.isArray(glob2)) {
+        const fns = glob2.map((input2) => picomatch4(input2, options, returnState));
         const arrayMatcher = (str2) => {
           for (const isMatch of fns) {
             const state2 = isMatch(str2);
@@ -213218,13 +213218,13 @@ var require_picomatch = __commonJS({
         };
         return arrayMatcher;
       }
-      const isState = isObject2(glob) && glob.tokens && glob.input;
-      if (glob === "" || typeof glob !== "string" && !isState) {
+      const isState = isObject2(glob2) && glob2.tokens && glob2.input;
+      if (glob2 === "" || typeof glob2 !== "string" && !isState) {
         throw new TypeError("Expected pattern to be a non-empty string");
       }
       const opts = options || {};
       const posix21 = opts.windows;
-      const regex = isState ? picomatch4.compileRe(glob, options) : picomatch4.makeRe(glob, options, false, true);
+      const regex = isState ? picomatch4.compileRe(glob2, options) : picomatch4.makeRe(glob2, options, false, true);
       const state = regex.state;
       delete regex.state;
       let isIgnored = () => false;
@@ -213233,8 +213233,8 @@ var require_picomatch = __commonJS({
         isIgnored = picomatch4(opts.ignore, ignoreOpts, returnState);
       }
       const matcher2 = (input2, returnObject = false) => {
-        const { isMatch, match, output: output2 } = picomatch4.test(input2, regex, options, { glob, posix: posix21 });
-        const result = { glob, state, regex, posix: posix21, input: input2, output: output2, match, isMatch };
+        const { isMatch, match, output: output2 } = picomatch4.test(input2, regex, options, { glob: glob2, posix: posix21 });
+        const result = { glob: glob2, state, regex, posix: posix21, input: input2, output: output2, match, isMatch };
         if (typeof opts.onResult === "function") {
           opts.onResult(result);
         }
@@ -213259,7 +213259,7 @@ var require_picomatch = __commonJS({
       }
       return matcher2;
     };
-    picomatch4.test = (input2, regex, options, { glob, posix: posix21 } = {}) => {
+    picomatch4.test = (input2, regex, options, { glob: glob2, posix: posix21 } = {}) => {
       if (typeof input2 !== "string") {
         throw new TypeError("Expected input to be a string");
       }
@@ -213268,11 +213268,11 @@ var require_picomatch = __commonJS({
       }
       const opts = options || {};
       const format = opts.format || (posix21 ? utils.toPosixSlashes : null);
-      let match = input2 === glob;
+      let match = input2 === glob2;
       let output2 = match && format ? format(input2) : input2;
       if (match === false) {
         output2 = format ? format(input2) : input2;
-        match = output2 === glob;
+        match = output2 === glob2;
       }
       if (match === false || opts.capture === true) {
         if (opts.matchBase === true || opts.basename === true) {
@@ -213283,8 +213283,8 @@ var require_picomatch = __commonJS({
       }
       return { isMatch: Boolean(match), match, output: output2 };
     };
-    picomatch4.matchBase = (input2, glob, options, posix21 = options && options.windows) => {
-      const regex = glob instanceof RegExp ? glob : picomatch4.makeRe(glob, options);
+    picomatch4.matchBase = (input2, glob2, options, posix21 = options && options.windows) => {
+      const regex = glob2 instanceof RegExp ? glob2 : picomatch4.makeRe(glob2, options);
       return regex.test(utils.basename(input2, { windows: posix21 }));
     };
     picomatch4.isMatch = (str2, patterns, options) => picomatch4(patterns, options)(str2);
@@ -213343,11 +213343,11 @@ var require_picomatch2 = __commonJS({
     "use strict";
     var pico = require_picomatch();
     var utils = require_utils();
-    function picomatch4(glob, options, returnState = false) {
+    function picomatch4(glob2, options, returnState = false) {
       if (options && (options.windows === null || options.windows === void 0)) {
         options = { ...options, windows: utils.isWindows() };
       }
-      return pico(glob, options, returnState);
+      return pico(glob2, options, returnState);
     }
     Object.assign(picomatch4, pico);
     module.exports = picomatch4;
@@ -236448,9 +236448,11 @@ function date4(params) {
 }
 
 // src/config/schema.ts
-var globs = external_exports.array(external_exports.string().min(1, "glob patterns cannot be empty"));
+var glob = external_exports.string().min(1, "glob patterns cannot be empty");
+var globs = external_exports.array(glob);
 var ENTRY_KINDS = ["JOB", "CONSUMER", "RPC", "RUN"];
-var entryGlob = external_exports.string().min(1, "glob patterns cannot be empty").refine((g) => !g.startsWith("!") && !g.split("/").some((seg) => seg === "." || seg === ".."), 'write a positive glob relative to the project, with no "!", "./" or "../"');
+var isRelativePositive = (g) => (!g.startsWith("!") || g.startsWith("!(")) && !g.split(/[/{},]/).some((seg) => seg === "." || seg === "..");
+var entryGlob = glob.refine(isRelativePositive, 'write a positive glob relative to the project, with no "!", "./" or "../"');
 var DEFAULT_INFRA = [
   "**/.env",
   "**/.env.*",
@@ -237155,13 +237157,76 @@ function routeSegment(route) {
   return route.entry === null ? "(layout)" : `(layout:${route.entry})`;
 }
 
+// src/classify/reasons.ts
+var CLASSIFICATIONS = ["global", "unknown", "touches-existing", "isolated"];
+var REASONS = {
+  "global-file-changed": "global",
+  "manifest-changed": "global",
+  "dependency-critical": "global",
+  "lockfile-only-change": "global",
+  "analysis-error": "unknown",
+  "parse-error": "unknown",
+  "dynamic-route": "unknown",
+  "unresolved-import": "unknown",
+  "routes-not-additive": "touches-existing",
+  "schema-not-additive": "touches-existing",
+  "resolvers-not-additive": "touches-existing",
+  "barrel-not-additive": "touches-existing",
+  "i18n-not-additive": "touches-existing",
+  "existing-file-modified": "touches-existing",
+  "existing-file-unreachable": "touches-existing",
+  "existing-file-renamed": "touches-existing",
+  "existing-file-deleted": "touches-existing",
+  "infra-file-changed": "touches-existing",
+  "lockfile-changed-elsewhere": "touches-existing",
+  "new-file-reached-by-existing-route": "touches-existing",
+  "tests-modified": "info",
+  "type-only-change": "info",
+  "declarations-additive": "info",
+  "dependency-changed": "info",
+  "lockfile-changed": "info",
+  "route-added": "info",
+  "routes-additive": "info",
+  "schema-additive": "info",
+  "resolvers-additive": "info",
+  "barrel-additive": "info",
+  "i18n-additive": "info",
+  "new-file-in-new-route": "info",
+  "new-file-disconnected": "info",
+  "file-excluded": "info",
+  "outside-project": "info",
+  "no-existing-code-touched": "info"
+};
+var REASON_CODES = Object.keys(REASONS);
+function reason(code2, detail, file2) {
+  return file2 === void 0 ? { code: code2, detail } : { code: code2, file: file2, detail };
+}
+function classificationFrom(reasons) {
+  for (const cls of ["global", "unknown", "touches-existing"]) if (reasons.some((r) => REASONS[r.code] === cls)) return cls;
+  return "isolated";
+}
+var RANK = new Map(REASON_CODES.map((code2, i) => [code2, i]));
+function sortReasons(reasons) {
+  const unique = new Map(reasons.map((r) => [`${r.code}\0${r.file ?? ""}\0${r.detail}`, r]));
+  return [...unique.values()].sort((a, b) => (RANK.get(a.code) ?? 0) - (RANK.get(b.code) ?? 0) || compareStrings(a.file ?? "", b.file ?? "") || compareStrings(a.detail, b.detail));
+}
+
 // src/classify/entry-files.ts
-function editedEntryFiles(configEntries, files, existing) {
+function editedEntryFiles(configEntries, files, existing, typeOnly = /* @__PURE__ */ new Set()) {
   return existing.flatMap((route) => {
     const path3 = configEntries.get(route.key);
-    const file2 = files.find((f) => f.path === path3 && f.status === "modified");
+    const file2 = files.find((f) => f.path === path3 && f.status === "modified" && !typeOnly.has(f.path));
     return file2 ? [{ route, file: file2 }] : [];
   });
+}
+function markEdited({ route, file: file2 }, reasons) {
+  if (file2.additive) file2.additive = false;
+  const additive = reasons.filter((r) => r.file === file2.path && r.code.endsWith("-additive") && REASONS[r.code] === "info");
+  for (const r of additive) reasons.splice(reasons.indexOf(r), 1);
+  if (!reasons.some((r) => r.file === file2.path && r.code === "existing-file-modified")) reasons.push(reason("existing-file-modified", `the file of entry point ${route.key}`, file2.path));
+}
+function reachedKeys(file2, reached, edited) {
+  return [.../* @__PURE__ */ new Set([...reached, ...edited.filter((e) => e.file.path === file2).map((e) => e.route.key)])];
 }
 
 // src/classify/additive.ts
@@ -237490,60 +237555,6 @@ function routesReaching(reach, routes) {
     if (best !== void 0) hits.push({ route, via: chainFrom(reach, best) });
   }
   return hits.sort((a, b) => compareStrings(a.route.path, b.route.path) || compareStrings(a.route.key, b.route.key));
-}
-
-// src/classify/reasons.ts
-var CLASSIFICATIONS = ["global", "unknown", "touches-existing", "isolated"];
-var REASONS = {
-  "global-file-changed": "global",
-  "manifest-changed": "global",
-  "dependency-critical": "global",
-  "lockfile-only-change": "global",
-  "analysis-error": "unknown",
-  "parse-error": "unknown",
-  "dynamic-route": "unknown",
-  "unresolved-import": "unknown",
-  "routes-not-additive": "touches-existing",
-  "schema-not-additive": "touches-existing",
-  "resolvers-not-additive": "touches-existing",
-  "barrel-not-additive": "touches-existing",
-  "i18n-not-additive": "touches-existing",
-  "existing-file-modified": "touches-existing",
-  "existing-file-unreachable": "touches-existing",
-  "existing-file-renamed": "touches-existing",
-  "existing-file-deleted": "touches-existing",
-  "infra-file-changed": "touches-existing",
-  "lockfile-changed-elsewhere": "touches-existing",
-  "new-file-reached-by-existing-route": "touches-existing",
-  "tests-modified": "info",
-  "type-only-change": "info",
-  "declarations-additive": "info",
-  "dependency-changed": "info",
-  "lockfile-changed": "info",
-  "route-added": "info",
-  "routes-additive": "info",
-  "schema-additive": "info",
-  "resolvers-additive": "info",
-  "barrel-additive": "info",
-  "i18n-additive": "info",
-  "new-file-in-new-route": "info",
-  "new-file-disconnected": "info",
-  "file-excluded": "info",
-  "outside-project": "info",
-  "no-existing-code-touched": "info"
-};
-var REASON_CODES = Object.keys(REASONS);
-function reason(code2, detail, file2) {
-  return file2 === void 0 ? { code: code2, detail } : { code: code2, file: file2, detail };
-}
-function classificationFrom(reasons) {
-  for (const cls of ["global", "unknown", "touches-existing"]) if (reasons.some((r) => REASONS[r.code] === cls)) return cls;
-  return "isolated";
-}
-var RANK = new Map(REASON_CODES.map((code2, i) => [code2, i]));
-function sortReasons(reasons) {
-  const unique = new Map(reasons.map((r) => [`${r.code}\0${r.file ?? ""}\0${r.detail}`, r]));
-  return [...unique.values()].sort((a, b) => (RANK.get(a.code) ?? 0) - (RANK.get(b.code) ?? 0) || compareStrings(a.file ?? "", b.file ?? "") || compareStrings(a.detail, b.detail));
 }
 
 // src/classify/risk.ts
@@ -238057,10 +238068,10 @@ function classify(input2) {
     if (hits.length > 0) reasons.push(reason("existing-file-modified", `reached by ${hits.length} existing route(s): ${describeHits(hits)}`, target.path));
     else reasons.push(reason("existing-file-unreachable", nodes.has(target.path) ? "modified, and no route reaches it" : "modified, and it is not part of the import graph", target.path));
   }
-  for (const { route, file: file2 } of editedEntryFiles(input2.backend?.configEntries ?? /* @__PURE__ */ new Map(), outputFiles, existingRoutes)) {
-    affected.add(route, file2.path, [file2.path]);
-    if (file2.additive) file2.additive = false;
-    if (!reasons.some((r) => r.file === file2.path && r.code === "existing-file-modified")) reasons.push(reason("existing-file-modified", `the file of entry point ${route.key}`, file2.path));
+  const editedEntries = editedEntryFiles(input2.backend?.configEntries ?? /* @__PURE__ */ new Map(), outputFiles, existingRoutes, input2.typeOnlyFiles);
+  for (const edited of editedEntries) {
+    affected.add(edited.route, edited.file.path, [edited.file.path]);
+    markEdited(edited, reasons);
   }
   for (const file2 of newFiles) {
     const impact = impactOf(file2);
@@ -238092,7 +238103,7 @@ function classify(input2) {
   const allKeys = [...headRoutes.routes, ...input2.baseRoutes?.routes ?? []].map((r) => r.key);
   const hasChildren = (key) => allKeys.some((k) => k.startsWith(`${key}${KEY_SEPARATOR}`));
   const riskFiles = outputFiles.filter((f) => !input2.typeOnlyFiles?.has(f.path)).filter((f) => f.role === "source" || f.role === "barrel" || f.role === "i18n" || f.role === "routes" || f.role === "schema" || f.role === "resolvers").map((f) => ({ path: f.path, change: f.status === "modified" ? f.additive === true ? "additive" : "modified" : f.status }));
-  const overrides = new Map([...input2.backend?.impacts ?? [], ...input2.declImpacts ?? []].map(([f, i]) => [f, [...i.affected.keys()].filter((k) => !hasChildren(k)).length]));
+  const overrides = new Map([...input2.backend?.impacts ?? [], ...input2.declImpacts ?? []].map(([f, i]) => [f, reachedKeys(f, i.affected.keys(), editedEntries).filter((k) => !hasChildren(k)).length]));
   const risk = computeRisk({ index, nodes, existingRoutes, hasChildren, files: riskFiles, ...input2.backend ? { unit: { one: "operation", many: "operations" } } : {}, ...overrides.size > 0 ? { affectedOverride: overrides } : {} });
   const sorted2 = sortReasons(reasons);
   return {
@@ -238125,11 +238136,11 @@ function parseCodeowners(text) {
     const line3 = raw.replace(/(^|\s)#.*$/, "").trim();
     if (line3 === "") continue;
     const [pattern = "", ...owners] = line3.split(/\s+/);
-    let glob = pattern.replace(/^\//, "");
-    const anchored = pattern.startsWith("/") || glob.replace(/\/$/, "").includes("/");
-    if (glob.endsWith("/")) glob = `${glob}**`;
-    const globs3 = [anchored ? glob : `**/${glob}`];
-    if (!glob.includes("*")) globs3.push(`${globs3[0] ?? ""}/**`);
+    let glob2 = pattern.replace(/^\//, "");
+    const anchored = pattern.startsWith("/") || glob2.replace(/\/$/, "").includes("/");
+    if (glob2.endsWith("/")) glob2 = `${glob2}**`;
+    const globs3 = [anchored ? glob2 : `**/${glob2}`];
+    if (!glob2.includes("*")) globs3.push(`${globs3[0] ?? ""}/**`);
     const match = (0, import_picomatch.default)(globs3, { dot: true });
     rules.push({ match: (path3) => match(path3), owners });
   }
@@ -250427,13 +250438,14 @@ function usesGlobal(sf, name, checker) {
 
 // src/backend/entrypoints.ts
 var import_picomatch2 = __toESM(require_picomatch2(), 1);
+var runsCode2 = (statement) => !import_typescript17.default.isImportDeclaration(statement) && !import_typescript17.default.isExportDeclaration(statement);
 function configuredEntries(byKind, programFiles, rel, anchorsOf) {
   return Object.entries(byKind).flatMap(([kind, globs3]) => {
     const match = (0, import_picomatch2.default)([...globs3], { dot: true });
     return programFiles.filter((sf) => match(rel(sf.fileName))).map((sf) => {
       const file2 = rel(sf.fileName);
       const key = `${kind} ${file2}`;
-      return { key, path: key, index: false, entry: file2, modules: anchorsOf(sf).filter((m) => m !== file2), layouts: [] };
+      return { key, path: key, index: false, entry: file2, modules: sortedUnique(sf.statements.filter(runsCode2).flatMap(anchorsOf)).filter((m) => m !== file2), layouts: [] };
     });
   });
 }
@@ -253450,12 +253462,15 @@ function contractsSection2(o) {
 
 // src/report/test-plan.ts
 import { posix as posix19 } from "path";
+function fileOfEntryKey(key) {
+  const space = key.indexOf(" ");
+  const file2 = key.slice(space + 1);
+  return ENTRY_KINDS.includes(key.slice(0, space)) && !file2.startsWith("/") && isScriptFile(file2) ? file2 : null;
+}
 function moduleOf(o, path3) {
   if (o.surface === "backend") {
     const parts = path3.split(" ");
-    const kind = parts[0] ?? "";
-    const rest = path3.slice(kind.length + 1);
-    if (ENTRY_KINDS.includes(kind) && !rest.startsWith("/") && isScriptFile(rest)) return kind;
+    if (fileOfEntryKey(path3) !== null) return parts[0] ?? "";
     if (parts.length >= 3) return `${parts[0] ?? ""} ${parts[1] ?? ""}`;
     if (parts.length === 2) {
       const first2 = (parts[1] ?? "").split("/").filter((s) => s !== "")[0];
@@ -254194,6 +254209,8 @@ function urlSegments(path3) {
 }
 function backendSegments(path3) {
   const parts = path3.split(" ");
+  const file2 = fileOfEntryKey(path3);
+  if (file2 !== null) return [parts[0] ?? "", ...urlSegments(file2)];
   if (parts.length >= 3) return [parts[0] ?? "", parts[1] ?? "", ...urlSegments(parts.slice(2).join(" "))];
   if (parts.length === 2) return [parts[0] ?? "", ...urlSegments(parts[1] ?? "")];
   return path3.split(".");

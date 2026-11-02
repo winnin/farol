@@ -2,6 +2,7 @@ import type { Output } from '../output/schema.js'
 import type { Linker } from './links.js'
 import { changedRoutes, type ChangedRoute } from './route-graph.js'
 import { HTML_TEXT as T, USAGE_TEXT as U, terms, type Terms } from './strings.js'
+import { fileOfEntryKey } from './test-plan.js'
 import { compactNumber } from './usage.js'
 
 /** What the routes section needs from the page renderer (implemented by the Html class of html.ts). */
@@ -58,6 +59,8 @@ export function urlSegments(path: string): string[] {
 /** Tree segments of a backend operation: `Query.getBrand` → Query › getBrand, `GET /a/b` → GET › a › b, `api GET /a` → api › GET › a. */
 export function backendSegments(path: string): string[] {
   const parts = path.split(' ')
+  const file = fileOfEntryKey(path)
+  if (file !== null) return [parts[0] ?? '', ...urlSegments(file)]
   // `orders_api GET /orders`: several services in one repository label their routes with the service.
   if (parts.length >= 3) return [parts[0] ?? '', parts[1] ?? '', ...urlSegments(parts.slice(2).join(' '))]
   if (parts.length === 2) return [parts[0] ?? '', ...urlSegments(parts[1] ?? '')]

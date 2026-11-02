@@ -21,7 +21,7 @@ class; they explain it.
 | `routes-not-additive` | touches-existing | The routes file was modified and a base route disappeared, changed entry module, layouts or referenced modules, the normalized diff removed lines, or a token of the base outside its imports is gone. One reason per problem. | the routes file |
 | `barrel-not-additive` | touches-existing | A modified barrel contains a statement that is not an export declaration, or a base export declaration is missing or edited. | the barrel |
 | `i18n-not-additive` | touches-existing | A modified i18n file lost a key or changed a value (deep comparison), or it is not JSON. | the i18n file |
-| `existing-file-modified` | touches-existing | An existing source file was modified; the detail lists the existing routes that reach it with the import chain. | the file |
+| `existing-file-modified` | touches-existing | An existing source file was modified; the detail lists the existing routes that reach it with the import chain, or names the entry point when the file is one in `backend.entries`. | the file |
 | `existing-file-unreachable` | touches-existing | An existing source file was modified but no route reaches it (or it is not in the import graph at all, e.g. a Markdown file). Still a change to existing code. | the file |
 | `existing-file-renamed` | touches-existing | An existing analyzed file was renamed (any content change included). | the new path |
 | `existing-file-deleted` | touches-existing | An existing analyzed file was deleted. | the deleted path |

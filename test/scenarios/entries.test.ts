@@ -122,6 +122,70 @@ describe('entry points named in backend.entries', () => {
       expect(o.classification).toBe('touches-existing')
       expect(o.routes.affected.map((r) => r.key)).toContain(JOB)
     })
+
+    it('counts the entry point in the risk of its file', async () => {
+      const FILE = 'src/rest/server.ts'
+      const o = await pr((repo) => { repo.write(FILE, `// note\n${SERVER}`) }, (repo) => {
+        entries({ RUN: [FILE] })(repo)
+        repo.write(FILE, SERVER)
+      })
+      const risk = o.risk.files.find((f) => f.path === FILE)
+      expect(risk?.change).toBe('modified')
+      expect(risk?.routesReached).toBeGreaterThan(0)
+    })
+
+    it('reads only as a change: no reason calls the edit additive', async () => {
+      const BARREL = 'src/jobs/index.ts'
+      const o = await pr((repo) => { repo.write(BARREL, `export { a } from '../lib/a'\n${RE_EXPORT}`) }, (repo) => {
+        entries({ JOB: [BARREL] })(repo)
+        repo.write(BARREL, "export { a } from '../lib/a'\n")
+      })
+      expect(codes(o)).toContain('existing-file-modified')
+      expect(codes(o)).not.toContain('barrel-additive')
+    })
+
+    it('changes nothing at runtime when the file only declares types', async () => {
+      const PORT = 'src/jobs/port.ts'
+      const o = await pr((repo) => { repo.write(PORT, 'export type A = number\nexport type B = string\n') }, (repo) => {
+        entries({ JOB: [PORT] })(repo)
+        repo.write(PORT, 'export type A = number\n')
+      })
+      expect(o.classification).toBe('isolated')
+      expect(codes(o)).toContain('type-only-change')
+      expect(o.routes.affected).toEqual([])
+    })
+  })
+
+  describe('what a job runs', () => {
+    const USE_CASE = 'src/lib/use-case.ts'
+    const useCase = (value: number): string => `export class UseCase {\n  execute() { return ${value} }\n}\n`
+
+    it('does not include a class the job only names as a type', async () => {
+      const o = await pr((repo) => { repo.write(USE_CASE, useCase(2)) }, (repo) => {
+        withJob(repo)
+        repo.write(USE_CASE, useCase(1))
+        repo.write(JOB_FILE, job('', "import type { UseCase } from '../lib/use-case'\nexport const keep = (u: UseCase) => u\n"))
+      })
+      expect(o.classification).toBe('touches-existing')
+      expect(o.routes.affected).toEqual([])
+    })
+
+    it('includes a class the job imports as a type and calls', async () => {
+      const o = await pr((repo) => { repo.write(USE_CASE, useCase(2)) }, (repo) => {
+        withJob(repo)
+        repo.write(USE_CASE, useCase(1))
+        repo.write(JOB_FILE, job('', "import type { UseCase } from '../lib/use-case'\nexport const run = (u: UseCase) => u.execute()\n"))
+      })
+      expect(o.routes.affected.map((r) => r.key)).toEqual([JOB])
+    })
+
+    it('includes a module the job re-exports', async () => {
+      const o = await pr((repo) => { repo.write('src/lib/b.ts', "export const b = () => 'c'\n") }, (repo) => {
+        withJob(repo)
+        repo.write(JOB_FILE, "export { a } from '../lib/a'\n")
+      })
+      expect(o.routes.affected.map((r) => r.key)).toEqual([JOB])
+    })
   })
 
   it('a test file that matches a glob is not an entry point', () => {

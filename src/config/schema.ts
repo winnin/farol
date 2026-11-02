@@ -1,10 +1,13 @@
 import { z } from 'zod'
 
-const globs = z.array(z.string().min(1, 'glob patterns cannot be empty'))
+const glob = z.string().min(1, 'glob patterns cannot be empty')
+const globs = z.array(glob)
 
 /** Kinds of the entry points a TypeScript backend names in `backend.entries`. */
 export const ENTRY_KINDS = ['JOB', 'CONSUMER', 'RPC', 'RUN'] as const
-const entryGlob = z.string().min(1, 'glob patterns cannot be empty').refine((g) => !g.startsWith('!') && !g.split('/').some((seg) => seg === '.' || seg === '..'), 'write a positive glob relative to the project, with no "!", "./" or "../"')
+// `!(a).ts` is a positive glob; `{./a,b}` holds a segment like any other.
+const isRelativePositive = (g: string): boolean => (!g.startsWith('!') || g.startsWith('!(')) && !g.split(/[/{},]/).some((seg) => seg === '.' || seg === '..')
+const entryGlob = glob.refine(isRelativePositive, 'write a positive glob relative to the project, with no "!", "./" or "../"')
 
 /**
  * Environment, infrastructure and CI files (deploy-time configuration, not code): matched anywhere in the repository,

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { OutputSchema, type Output } from '../../src/output/schema.js'
+import { backendSegments } from '../../src/report/html-routes.js'
 import { moduleOf, testPlan } from '../../src/report/test-plan.js'
 import { FIXTURES_DIR } from '../helpers/repo.js'
 
@@ -59,5 +60,19 @@ describe('manual test checklist', () => {
   it('keeps gRPC methods of a Go service under their service', () => {
     const backend = { ...golden('05-shared-component'), surface: 'backend' as const }
     expect(moduleOf(backend, 'RPC brandspb.Brands/GetBrand')).toBe('RPC /brandspb.Brands')
+  })
+})
+
+describe('tree of backend operations', () => {
+  it.each([
+    ['JOB src/my jobs/a.ts', ['JOB', 'src', 'my jobs', 'a.ts']],
+    ['RUN scripts/a.py', ['RUN', 'scripts', 'a.py']],
+    ['JOB src/jobs/a.ts', ['JOB', 'src', 'jobs', 'a.ts']],
+    ['GET /static/app.js', ['GET', 'static', 'app.js']],
+    ['api GET /a/b', ['api', 'GET', 'a', 'b']],
+    ['RPC brandspb.Brands/GetBrand', ['RPC', 'brandspb.Brands', 'GetBrand']],
+    ['Query.brand', ['Query', 'brand']],
+  ])('%s', (key, segments) => {
+    expect(backendSegments(key)).toEqual(segments)
   })
 })
