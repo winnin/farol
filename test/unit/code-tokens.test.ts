@@ -11,6 +11,8 @@ const same = (a: string, b: string, file = 'a.ts'): boolean => tokens(a, file).j
 describe('tokens that change what code does', () => {
   it.each([
     ['a hole at the end of an array', 'const a = [1,,]', 'const a = [1,]'],
+    ['one hole', 'const a = [,]', 'const a = []'],
+    ['two holes', 'const a = [,,]', 'const a = [,]'],
     ['an empty body of an if', 'if (a) ;\nb()', 'if (a) b()'],
     ['the parts of a for loop', 'for (a;;b) c()', 'for (a;b;) c()'],
   ])('%s counts', (_name, a, b) => {
@@ -24,6 +26,8 @@ describe('JSX text, as React reads it', () => {
     ['a space between expressions', '<p>{a} {b}</p>', '<p>{a}{b}</p>'],
     ['a space after text', '<p>items {a}</p>', '<p>items{a}</p>'],
     ['spaces inside a line', '<p>a  b</p>', '<p>a b</p>'],
+    ['a non-breaking space at the start of a line', '<p>\n  \u00a0items\n</p>', '<p>\n  items\n</p>'],
+    ['a non-breaking space at the end of a line', '<p>\n  items\u00a0\n</p>', '<p>\n  items\n</p>'],
   ])('%s is a change', (_name, a, b) => {
     expect(same(`const x = ${a}`, `const x = ${b}`, 'a.tsx')).toBe(false)
   })

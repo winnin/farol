@@ -37,7 +37,8 @@ export function registrationReader(r: AppResolver) {
     if (seen.has(x)) return false
     seen.add(x)
     if (x.kind === ts.SyntaxKind.ThisKeyword) return true
-    if (ts.isPropertyAccessExpression(x) || ts.isElementAccessExpression(x) || ts.isCallExpression(x)) return unknownCode(x.expression, seen)
+    if (ts.isPropertyAccessExpression(x)) return unknownCode(x.expression, seen) || unknownCode(x.name, seen)
+    if (ts.isElementAccessExpression(x) || ts.isCallExpression(x)) return unknownCode(x.expression, seen)
     if (ts.isArrayLiteralExpression(x)) return x.elements.some((e) => unknownCode(e, seen))
     if (ts.isConditionalExpression(x)) return unknownCode(x.whenTrue, seen) || unknownCode(x.whenFalse, seen)
     if (ts.isBinaryExpression(x)) return unknownCode(x.left, seen) || unknownCode(x.right, seen)

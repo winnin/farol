@@ -55,10 +55,19 @@ const ENDS_WITH_SEMICOLON = new Set([
   ts.SyntaxKind.PropertyDeclaration,
 ])
 
-/** JSX text as React reads it: lines without their indent, joined by a space. Spaces on one line count. */
+/** JSX text as React reads it: lines without their indent, joined by a space. Spaces on one line count, and only spaces and tabs are indent. */
 function jsxText(text: string): string {
   const lines = text.split(/\r\n|\n|\r/)
-  return lines.map((line, i) => (i === 0 ? line : line.trimStart())).map((line, i) => (i === lines.length - 1 ? line : line.trimEnd())).filter((line) => line !== '').join(' ')
+  return lines.map((line, i) => (i === 0 ? line : line.replace(/^[ \t]+/, ''))).map((line, i) => (i === lines.length - 1 ? line : line.replace(/[ \t]+$/, ''))).filter((line) => line !== '').join(' ')
+}
+
+/** A closing token whose trailing comma only formats: in an array, a comma after a last hole counts that hole. */
+function closesTrailingComma(n: ts.Node, text: string): boolean {
+  if (text === ']' && ts.isArrayLiteralExpression(n.parent)) {
+    const last = n.parent.elements[n.parent.elements.length - 1]
+    return last === undefined || !ts.isOmittedExpression(last)
+  }
+  return text === '}' || text === ')' || text === ']'
 }
 
 /**
@@ -79,7 +88,7 @@ export function codeTokens(node: ts.Node, sf: ts.SourceFile, removed: readonly (
       const skipped = sf.text.slice(at, n.pos).trim()
       if (skipped) out.push(skipped)
       const text = n.kind === ts.SyntaxKind.JsxText ? jsxText(sf.text.slice(n.pos, n.end)) : n.getText(sf)
-      if ((text === '}' || text === ')' || text === ']') && out[out.length - 1] === ',') out.pop()
+      if (closesTrailingComma(n, text) && out[out.length - 1] === ',') out.pop()
       if (text && !(text === ';' && out[out.length - 1] === ';')) out.push(text)
       at = Math.max(at, n.end)
     }

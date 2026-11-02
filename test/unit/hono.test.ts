@@ -91,6 +91,23 @@ describe('Hono middleware placement', () => {
     expect(t.operations.map((o) => o.key)).toEqual(['GET /api/users'])
   })
 
+  it('a member of an imported module that can change is a dynamic route', () => {
+    const files = (decl: string): Record<string, string> => ({
+      'src/main.ts': "import { Hono } from 'hono'\nimport * as middleware from './middleware'\nexport const app = new Hono()\napp.use('*', middleware.guard)\n",
+      'src/middleware.ts': `const a = (c: never) => c\nexport ${decl} guard = a\n`,
+    })
+    expect(table(files('let')).dynamic.map((d) => d.file)).toEqual(['src/main.ts'])
+    expect(table(files('const')).dynamic).toEqual([])
+  })
+
+  it('a guard held in a shorthand property reaches what its variable uses', () => {
+    const t = table({
+      'src/main.ts': "import express from 'express'\nimport { create } from './create'\nconst app = express()\nconst guard = create()\nconst handlers = { guard }\napp.post('/a', handlers.guard, (req, res) => res.send('a'))\n",
+      'src/create.ts': 'export const create = () => () => undefined\n',
+    })
+    expect(t.operations.map((o) => [o.key, o.modules])).toEqual([['POST /a', ['src/create.ts']]])
+  })
+
   it('a file that gets its app from a factory through a barrel holds that app', () => {
     const t = table({
       'src/main.ts': "import { createApp } from './barrel'\nexport const app = createApp({ a: 1 })\n",

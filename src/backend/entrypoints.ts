@@ -136,7 +136,8 @@ export function buildBackendTable(input: BackendInput): BackendTable {
     const followed = new Set<ts.Node>([arg])
     const visit = (node: ts.Node): void => {
       if (ts.isIdentifier(node)) {
-        let decl: ts.Node | undefined = checker.getSymbolAtLocation(node)?.valueDeclaration
+        const symbol = ts.isShorthandPropertyAssignment(node.parent) ? checker.getShorthandAssignmentValueSymbol(node.parent) : checker.getSymbolAtLocation(node)
+        let decl: ts.Node | undefined = symbol?.valueDeclaration
         while (decl && ts.isBindingElement(decl)) decl = decl.parent.parent
         const code = decl && ts.isVariableDeclaration(decl) ? decl.initializer : decl && ts.isFunctionDeclaration(decl) ? decl : undefined
         if (code && code.getSourceFile() === own && !followed.has(code)) {

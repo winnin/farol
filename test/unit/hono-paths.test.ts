@@ -17,4 +17,13 @@ describe('the path a Hono registration covers', () => {
   ])('%s under %s: %s', (path, full, expected) => {
     expect(underPath(path, full)).toBe(expected)
   })
+
+  it.each([
+    ['/files', '/files/:name?', true],
+    ['/files/a', '/files/:name?', true],
+    ['/other', '/files/:name?', false],
+    ['/files', '/files/:name', false],
+  ])('an optional parameter: %s under %s is %s', (path, full, expected) => {
+    expect(underPath(path, full)).toBe(expected)
+  })
 })

@@ -31,14 +31,15 @@ function segments(path: string): string[] {
 
 /**
  * Whether one request can reach both an endpoint path and a mount's full path: `:param` and `*` segments match any
- * segment, and a regular-expression parameter (`:path{.+}`) or a final `*` matches the rest of the path.
+ * segment, a regular-expression parameter (`:path{.+}`) or a final `*` matches the rest of the path, and an optional
+ * parameter (`:name?`) also matches nothing.
  */
 export function overlaps(path: string, base: string): boolean {
   const own = segments(path)
   const any = (s: string): boolean => s.includes(':') || s.includes('*')
   for (const [i, seg] of segments(base).entries()) {
     const o = own[i]
-    if (o === undefined) return false
+    if (o === undefined) return seg.startsWith(':') && seg.endsWith('?')
     if (o.includes('{') || seg.includes('{') || (o === '*' && i === own.length - 1)) return true
     if (o !== seg && !any(o) && !any(seg)) return false
   }

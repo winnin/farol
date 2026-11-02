@@ -237194,7 +237194,14 @@ var ENDS_WITH_SEMICOLON = /* @__PURE__ */ new Set([
 ]);
 function jsxText(text) {
   const lines = text.split(/\r\n|\n|\r/);
-  return lines.map((line3, i) => i === 0 ? line3 : line3.trimStart()).map((line3, i) => i === lines.length - 1 ? line3 : line3.trimEnd()).filter((line3) => line3 !== "").join(" ");
+  return lines.map((line3, i) => i === 0 ? line3 : line3.replace(/^[ \t]+/, "")).map((line3, i) => i === lines.length - 1 ? line3 : line3.replace(/[ \t]+$/, "")).filter((line3) => line3 !== "").join(" ");
+}
+function closesTrailingComma(n, text) {
+  if (text === "]" && import_typescript.default.isArrayLiteralExpression(n.parent)) {
+    const last = n.parent.elements[n.parent.elements.length - 1];
+    return last === void 0 || !import_typescript.default.isOmittedExpression(last);
+  }
+  return text === "}" || text === ")" || text === "]";
 }
 function codeTokens(node2, sf, removed = []) {
   const out = [];
@@ -237209,7 +237216,7 @@ function codeTokens(node2, sf, removed = []) {
       const skipped = sf.text.slice(at, n.pos).trim();
       if (skipped) out.push(skipped);
       const text = n.kind === import_typescript.default.SyntaxKind.JsxText ? jsxText(sf.text.slice(n.pos, n.end)) : n.getText(sf);
-      if ((text === "}" || text === ")" || text === "]") && out[out.length - 1] === ",") out.pop();
+      if (closesTrailingComma(n, text) && out[out.length - 1] === ",") out.pop();
       if (text && !(text === ";" && out[out.length - 1] === ";")) out.push(text);
       at = Math.max(at, n.end);
     }
@@ -248729,7 +248736,7 @@ function overlaps(path3, base) {
   const any2 = (s) => s.includes(":") || s.includes("*");
   for (const [i, seg] of segments(base).entries()) {
     const o = own2[i];
-    if (o === void 0) return false;
+    if (o === void 0) return seg.startsWith(":") && seg.endsWith("?");
     if (o.includes("{") || seg.includes("{") || o === "*" && i === own2.length - 1) return true;
     if (o !== seg && !any2(o) && !any2(seg)) return false;
   }
@@ -248919,7 +248926,8 @@ function registrationReader(r) {
     if (seen.has(x)) return false;
     seen.add(x);
     if (x.kind === import_typescript9.default.SyntaxKind.ThisKeyword) return true;
-    if (import_typescript9.default.isPropertyAccessExpression(x) || import_typescript9.default.isElementAccessExpression(x) || import_typescript9.default.isCallExpression(x)) return unknownCode(x.expression, seen);
+    if (import_typescript9.default.isPropertyAccessExpression(x)) return unknownCode(x.expression, seen) || unknownCode(x.name, seen);
+    if (import_typescript9.default.isElementAccessExpression(x) || import_typescript9.default.isCallExpression(x)) return unknownCode(x.expression, seen);
     if (import_typescript9.default.isArrayLiteralExpression(x)) return x.elements.some((e) => unknownCode(e, seen));
     if (import_typescript9.default.isConditionalExpression(x)) return unknownCode(x.whenTrue, seen) || unknownCode(x.whenFalse, seen);
     if (import_typescript9.default.isBinaryExpression(x)) return unknownCode(x.left, seen) || unknownCode(x.right, seen);
@@ -250449,7 +250457,8 @@ function buildBackendTable(input2) {
     const followed = /* @__PURE__ */ new Set([arg]);
     const visit3 = (node2) => {
       if (import_typescript17.default.isIdentifier(node2)) {
-        let decl = checker.getSymbolAtLocation(node2)?.valueDeclaration;
+        const symbol2 = import_typescript17.default.isShorthandPropertyAssignment(node2.parent) ? checker.getShorthandAssignmentValueSymbol(node2.parent) : checker.getSymbolAtLocation(node2);
+        let decl = symbol2?.valueDeclaration;
         while (decl && import_typescript17.default.isBindingElement(decl)) decl = decl.parent.parent;
         const code2 = decl && import_typescript17.default.isVariableDeclaration(decl) ? decl.initializer : decl && import_typescript17.default.isFunctionDeclaration(decl) ? decl : void 0;
         if (code2 && code2.getSourceFile() === own2 && !followed.has(code2)) {
