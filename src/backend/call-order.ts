@@ -51,27 +51,38 @@ function keepsOrder(items: readonly string[], other: readonly string[]): boolean
 
 const placed = (c: Call): string => `${c.scope}\n${c.text}`
 
-/** A call the head still has, but not in the place it had in the base. */
+/** A call the head still has, but not in the place it had in the base. Copies count one by one. */
 function movedCall(base: readonly Call[], head: readonly Call[]): boolean {
   const texts = new Set(head.map((c) => c.text))
-  const places = new Set(head.map(placed))
-  return base.some((c) => texts.has(c.text) && !places.has(placed(c)))
+  const left = new Map<string, number>()
+  for (const c of head) left.set(placed(c), (left.get(placed(c)) ?? 0) + 1)
+  return base.some((c) => {
+    const n = left.get(placed(c)) ?? 0
+    left.set(placed(c), n - 1)
+    return n <= 0 && texts.has(c.text)
+  })
+}
+
+/** A property of a top-level object, with the code of its statement without the object's properties. */
+export interface Property {
+  owner: string
+  text: string
 }
 
 /** The parts of a file version that say where its code runs. */
 export interface AppCode {
   rest: string[]
   calls: Call[]
-  properties: string[]
+  properties: Property[]
 }
 
 /**
  * Whether a file with an app or handlers changed in a way the item comparison calls additive: statements or calls that
  * stayed changed order or place (`app.use(mw)` after the routes no longer runs for them; the first matching handler
- * serves a request; a handler moved to another factory has another path), or an object has a new property
+ * serves a request; a handler moved to another factory has another path), or an object of the base has a new property
  * (`use(cors(options))`).
  */
 export function appCodeChanged(base: AppCode, head: AppCode): boolean {
   const texts = (a: AppCode): string[] => a.calls.map((c) => c.text)
-  return !keepsOrder(base.rest, head.rest) || !keepsOrder(texts(base), texts(head)) || movedCall(base.calls, head.calls) || head.properties.some((p) => !isBlank(p) && !base.rest.includes(p))
+  return !keepsOrder(base.rest, head.rest) || !keepsOrder(texts(base), texts(head)) || movedCall(base.calls, head.calls) || head.properties.some((p) => !isBlank(p.text) && base.rest.includes(p.owner) && !base.rest.includes(p.text))
 }

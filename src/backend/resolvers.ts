@@ -1,7 +1,7 @@
 import ts from 'typescript'
 import { compareStrings, sortedUnique } from '../output/order.js'
 import { codeText, parseIsolated, unwrap } from '../project/parse.js'
-import { callOrder, isBlank, type Call } from './call-order.js'
+import { callOrder, isBlank, type Call, type Property } from './call-order.js'
 import { mountNodes } from './hono.js'
 import { importsHono, isHonoModule } from './hono-resolver.js'
 import { isWidePath, plainChain, restNodes, takesNext, type RestNode } from './rest.js'
@@ -123,7 +123,7 @@ export interface FileEntries {
   mounts: Map<string, MountEntry>
   impure: Map<string, string>
   middleware: Set<string>
-  properties: string[]
+  properties: Property[]
   /** Calls in source order, with the place they run. */
   calls: Call[]
 }
@@ -189,7 +189,7 @@ export function resolverEntries(
   // literals on its own, with the resolver members blanked out. Adding a property or a statement is not a change.
   const blank = (node: ts.Node): string => codeText(node, sf, removed)
   const items: string[] = []
-  const properties: string[] = []
+  const properties: Property[] = []
   // Top-level code that is not a declaration, an inert value, a handler or a mount runs when the file loads
   // (`app.use(mw)`, `const db = connect()`): adding some is a change.
   const loadCode: string[] = []
@@ -202,13 +202,14 @@ export function resolverEntries(
       if (runsCode(statement, honoNames) && !isBlank(text)) loadCode.push(text)
       continue
     }
+    const owner = blank(statement).replace(blank(object), '{}')
     for (const prop of object.properties) {
       const text = blank(prop)
       items.push(text)
-      properties.push(text)
+      properties.push({ owner, text })
       if (runsCode(prop, honoNames) && !isBlank(text)) loadCode.push(text)
     }
-    items.push(blank(statement).replace(blank(object), '{}'))
+    items.push(owner)
   }
   // Handlers whose registration runs other code (`app.use(mw).get(…)`, `get('/x', rateLimit(), h)`), with the text of the
   // registration without the handler: the chain and the arguments are blanked with the handler. Handlers that can call
@@ -248,7 +249,7 @@ export interface ResolverChanges {
   added: string[]
   removed: string[]
   changed: string[]
-  /** Code outside the resolver members changed (imports, helpers, module-level code, the order of calls): every resolver may be affected. */
+  /** Code outside the resolver members changed (imports, helpers, module-level code, the order or place of calls): every resolver may be affected. */
   restChanged: boolean
   /** A change that can reach every endpoint of the file's apps: module code, new load code, or a chain or handler that runs for others. */
   wide: boolean

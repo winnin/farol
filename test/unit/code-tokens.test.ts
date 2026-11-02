@@ -8,6 +8,16 @@ const tokens = (code: string, file = 'a.ts'): string[] => {
 }
 const same = (a: string, b: string, file = 'a.ts'): boolean => tokens(a, file).join(' ') === tokens(b, file).join(' ')
 
+describe('tokens that change what code does', () => {
+  it.each([
+    ['a hole at the end of an array', 'const a = [1,,]', 'const a = [1,]'],
+    ['an empty body of an if', 'if (a) ;\nb()', 'if (a) b()'],
+    ['the parts of a for loop', 'for (a;;b) c()', 'for (a;b;) c()'],
+  ])('%s counts', (_name, a, b) => {
+    expect(same(a, b)).toBe(false)
+  })
+})
+
 describe('JSX text, as React reads it', () => {
   it.each([
     ['a space before text', '<p>{a} items</p>', '<p>{a}items</p>'],
@@ -38,6 +48,8 @@ describe('the tokens of parsed code', () => {
     ['a semicolon', 'const a = 1;', 'const a = 1'],
     ['a trailing comma in a call', 'f(a,)', 'f(a)'],
     ['a trailing comma in an object', 'const a = { b: 1, }', 'const a = { b: 1 }'],
+    ['a trailing comma in an array', 'const a = [1, 2,]', 'const a = [1, 2]'],
+    ['an empty statement', 'f();;\ng()', 'f();\ng()'],
   ])('%s does not count', (_name, a, b) => {
     expect(same(a, b)).toBe(true)
   })

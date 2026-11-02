@@ -94,6 +94,44 @@ describe('where a call runs', () => {
   })
 })
 
+describe('code that only adds', () => {
+  it('a new top-level object in a file with an app stays additive', async () => {
+    const o = await hono(publicFile(`${ITEMS}\nexport const LIMITS = { max: 10 }`), publicFile(ITEMS))
+    expect(o.classification).toBe('isolated')
+  })
+
+  it('a new handler in a function, in a file that ends statements with semicolons, stays additive', async () => {
+    const o = await hono((repo) => { edit(repo, PUBLIC, `${ITEMS};`, `${ITEMS};\n  routes.get('/new', (c) => c.text('new'));`) }, (repo) => { edit(repo, PUBLIC, ITEMS, `${ITEMS};`) })
+    expect(o.classification).toBe('isolated')
+  })
+
+  it('a new property of an object that exists stays a change', async () => {
+    const o = await hono(publicFile(`const opts = { a: 1, b: 2 }\n${ITEMS}`), publicFile(`const opts = { a: 1 }\n${ITEMS}`))
+    expect(o.classification).toBe('touches-existing')
+  })
+})
+
+describe('copies of a call', () => {
+  it('one of two equal handlers moved to another function is a change', async () => {
+    const o = await hono(twoFactories(`${ONE}\n${EXTRA}`, EXTRA), (repo) => { twoFactories(ONE, `${EXTRA}\n${EXTRA}`)(repo); mountBoth(repo) })
+    expect(o.classification).toBe('touches-existing')
+  })
+})
+
+describe('a new handler with the full key of an endpoint in another file', () => {
+  it('is a change to that endpoint', async () => {
+    const EXTRA_FILE = 'src/http/routes/extra.routes.ts'
+    const file = (body: string): string => `import { Hono } from 'hono'\nexport function createExtraRoutes(): Hono {\n  const routes = new Hono()\n  routes.get('/e', (c) => c.text('e'))\n${body}  return routes\n}\n`
+    const o = await hono((repo) => { repo.write(EXTRA_FILE, file("  routes.get('/items', (c) => c.text('other'))\n")) }, (repo) => {
+      repo.write(EXTRA_FILE, file(''))
+      edit(repo, INDEX, "import { createPublicRoutes } from './public.routes'", "import { createExtraRoutes } from './extra.routes'\nimport { createPublicRoutes } from './public.routes'")
+      edit(repo, INDEX, "  app.route('/public', createPublicRoutes())\n", "  app.route('/public', createExtraRoutes())\n  app.route('/public', createPublicRoutes())\n")
+    })
+    expect(o.classification).toBe('touches-existing')
+    expect(o.routes.affected.map((r) => r.key)).toContain('GET /public/items')
+  })
+})
+
 describe('new top-level code', () => {
   it.each([
     ['a copy of use() above a handler', `${ITEMS}\n${USE}`, `${USE}\n${ITEMS}\n${USE}`],
@@ -137,6 +175,11 @@ describe('Express and Fastify files', () => {
     expect((await rest(before, after)).classification).toBe('touches-existing')
   })
 
+  it('a new object stays additive', async () => {
+    const o = await rest(express(`app.use(auth)\n${GET}`), express(`app.use(auth)\n${GET}\nexport const LIMITS = { max: 10 }`))
+    expect(o.classification).toBe('isolated')
+  })
+
   it('a new handler stays additive', async () => {
     const o = await rest(express(`app.use(auth)\n${GET}`), express(`app.use(auth)\n${GET}\napp.get('/b', async () => 'b')`))
     expect(o.classification).toBe('isolated')
@@ -151,6 +194,11 @@ describe('routes files', () => {
   ])('%s is a change', async (_name, to) => {
     const o = await analyzeVariant('01-new-route', cleanups, (r) => { edit(r, 'src/routes.tsx', "'a  b'", to) }, (r) => { edit(r, 'src/routes.tsx', 'export const router', TITLE) })
     expect(o.classification).toBe('touches-existing')
+  })
+
+  it('a trailing comma of an array is formatting', async () => {
+    const o = await analyzeVariant('01-new-route', cleanups, (r) => { edit(r, 'src/routes.tsx', '  2,\n]', '  2\n]') }, (r) => { edit(r, 'src/routes.tsx', 'export const router', 'export const pick = () => [\n  1,\n  2,\n]\nexport const router') })
+    expect(o.classification).toBe('isolated')
   })
 
   it('formatting and a new export stay additive', async () => {

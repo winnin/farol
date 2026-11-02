@@ -33,11 +33,11 @@ describe('Hono middleware placement', () => {
   })
 
   it('a parameter as middleware is a dynamic route: its code comes from the callers', () => {
-    expect(dynamic({ ...base, 'src/main.ts': app("export function install(handler: never) {\n  app.use('*', handler)\n}") })).toEqual(['src/main.ts:6 Hono middleware comes from a parameter or a variable that can change: farol cannot find its code'])
+    expect(dynamic({ ...base, 'src/main.ts': app("export function install(handler: never) {\n  app.use('*', handler)\n}") })).toEqual(['src/main.ts:6 Hono middleware or handler comes from a parameter or a variable that can change: farol cannot find its code'])
   })
 
   it('a parameter as a guard before the handler is a dynamic route', () => {
-    expect(dynamic({ ...base, 'src/main.ts': app("export function install(guard: never) {\n  app.post('/x', guard, (c) => c.text('ok'))\n}") })).toEqual(['src/main.ts:6 Hono middleware comes from a parameter or a variable that can change: farol cannot find its code'])
+    expect(dynamic({ ...base, 'src/main.ts': app("export function install(guard: never) {\n  app.post('/x', guard, (c) => c.text('ok'))\n}") })).toEqual(['src/main.ts:6 Hono middleware or handler comes from a parameter or a variable that can change: farol cannot find its code'])
   })
 
   it.each([
@@ -60,7 +60,7 @@ describe('Hono middleware placement', () => {
     ['a spread last argument of a handler call', 'hs: never[]', "app.get('/x', ...hs)"],
   ])('%s as middleware is a dynamic route', (_name, params, body) => {
     const details = table({ ...base, 'src/main.ts': app(`const other = (c: never) => c\nexport function install(${params}) {\n  ${body}\n}`) }).dynamic.map((d) => d.detail)
-    expect(details).toEqual(['Hono middleware comes from a parameter or a variable that can change: farol cannot find its code'])
+    expect(details).toEqual(['Hono middleware or handler comes from a parameter or a variable that can change: farol cannot find its code'])
   })
 
   it.each([
@@ -78,6 +78,17 @@ describe('Hono middleware placement', () => {
     })
     expect(t.operations.map((o) => o.key)).toEqual(['GET /api/users'])
     expect(t.dynamic).toEqual([])
+  })
+
+  it.each([
+    ['a shorthand property', 'const register = (app: Hono) => {\n  app.get(\'/users\', (c) => c.text(\'u\'))\n}\nexport const routes = { register }\n'],
+    ['a property set from a named function', 'const add = (app: Hono) => {\n  app.get(\'/users\', (c) => c.text(\'u\'))\n}\nexport const routes = { register: add }\n'],
+  ])('a function held in %s keeps the mount above the app it receives', (_name, routes) => {
+    const t = table({
+      'src/main.ts': "import { Hono } from 'hono'\nimport { routes } from './routes'\nexport const app = new Hono()\nconst api = new Hono()\napp.route('/api', api)\nroutes.register(api)\n",
+      'src/routes.ts': `import type { Hono } from 'hono'\n${routes}`,
+    })
+    expect(t.operations.map((o) => o.key)).toEqual(['GET /api/users'])
   })
 
   it('a file that gets its app from a factory through a barrel holds that app', () => {

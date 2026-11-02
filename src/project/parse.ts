@@ -63,7 +63,7 @@ function jsxText(text: string): string {
 
 /**
  * The code of a node as the parser read it, without comments or formatting: strings, templates, regular expressions
- * and JSX text are one token each, every statement ends with `;`, a trailing comma in `{}` or `()` does not count, and
+ * and JSX text are one token each, every statement ends with one `;`, a trailing comma in `{}`, `()` or `[]` does not count, and
  * text the parser skipped is kept. Nodes in `removed` (ranges of the file) are left out, with the comma after them.
  */
 export function codeTokens(node: ts.Node, sf: ts.SourceFile, removed: readonly (readonly [number, number])[] = []): string[] {
@@ -79,8 +79,8 @@ export function codeTokens(node: ts.Node, sf: ts.SourceFile, removed: readonly (
       const skipped = sf.text.slice(at, n.pos).trim()
       if (skipped) out.push(skipped)
       const text = n.kind === ts.SyntaxKind.JsxText ? jsxText(sf.text.slice(n.pos, n.end)) : n.getText(sf)
-      if ((text === '}' || text === ')') && out[out.length - 1] === ',') out.pop()
-      if (text) out.push(text)
+      if ((text === '}' || text === ')' || text === ']') && out[out.length - 1] === ',') out.pop()
+      if (text && !(text === ';' && out[out.length - 1] === ';')) out.push(text)
       at = Math.max(at, n.end)
     }
     children.forEach((child, i) => {

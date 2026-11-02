@@ -287,7 +287,7 @@ export function classify(input: ClassifyInput): ClassifyResult {
       const lostCode = removedLines.length === 0 && losesTokens(file.path, baseText, headText)
       out.additive = tableChanges.length === 0 && removedLines.length === 0 && !lostCode
       if (removedLines.length > 0) reasons.push(reason('routes-not-additive', `${removedLines.length} line(s) removed (line ${removedLines.join(', ')} of the base)`, file.path))
-      if (lostCode) reasons.push(reason('routes-not-additive', 'a line differs only by spaces, and the code changed (a string, for example)', file.path))
+      if (lostCode) reasons.push(reason('routes-not-additive', 'code of the base is gone though no line was removed (a string, JSX text, or code on an import line)', file.path))
       if (out.additive) reasons.push(reason('routes-additive', 'every existing route is unchanged and no line was removed', file.path))
       continue
     }

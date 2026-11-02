@@ -237209,8 +237209,8 @@ function codeTokens(node2, sf, removed = []) {
       const skipped = sf.text.slice(at, n.pos).trim();
       if (skipped) out.push(skipped);
       const text = n.kind === import_typescript.default.SyntaxKind.JsxText ? jsxText(sf.text.slice(n.pos, n.end)) : n.getText(sf);
-      if ((text === "}" || text === ")") && out[out.length - 1] === ",") out.pop();
-      if (text) out.push(text);
+      if ((text === "}" || text === ")" || text === "]") && out[out.length - 1] === ",") out.pop();
+      if (text && !(text === ";" && out[out.length - 1] === ";")) out.push(text);
       at = Math.max(at, n.end);
     }
     children.forEach((child, i) => {
@@ -237989,7 +237989,7 @@ function classify(input2) {
       const lostCode = removedLines.length === 0 && losesTokens(file2.path, baseText, headText);
       out.additive = tableChanges.length === 0 && removedLines.length === 0 && !lostCode;
       if (removedLines.length > 0) reasons.push(reason("routes-not-additive", `${removedLines.length} line(s) removed (line ${removedLines.join(", ")} of the base)`, file2.path));
-      if (lostCode) reasons.push(reason("routes-not-additive", "a line differs only by spaces, and the code changed (a string, for example)", file2.path));
+      if (lostCode) reasons.push(reason("routes-not-additive", "code of the base is gone though no line was removed (a string, JSX text, or code on an import line)", file2.path));
       if (out.additive) reasons.push(reason("routes-additive", "every existing route is unchanged and no line was removed", file2.path));
       continue;
     }
@@ -248778,12 +248778,17 @@ var placed = (c) => `${c.scope}
 ${c.text}`;
 function movedCall(base, head) {
   const texts = new Set(head.map((c) => c.text));
-  const places = new Set(head.map(placed));
-  return base.some((c) => texts.has(c.text) && !places.has(placed(c)));
+  const left = /* @__PURE__ */ new Map();
+  for (const c of head) left.set(placed(c), (left.get(placed(c)) ?? 0) + 1);
+  return base.some((c) => {
+    const n = left.get(placed(c)) ?? 0;
+    left.set(placed(c), n - 1);
+    return n <= 0 && texts.has(c.text);
+  });
 }
 function appCodeChanged(base, head) {
   const texts = (a) => a.calls.map((c) => c.text);
-  return !keepsOrder(base.rest, head.rest) || !keepsOrder(texts(base), texts(head)) || movedCall(base.calls, head.calls) || head.properties.some((p) => !isBlank(p) && !base.rest.includes(p));
+  return !keepsOrder(base.rest, head.rest) || !keepsOrder(texts(base), texts(head)) || movedCall(base.calls, head.calls) || head.properties.some((p) => !isBlank(p.text) && base.rest.includes(p.owner) && !base.rest.includes(p.text));
 }
 
 // src/backend/resolvers.ts
@@ -248974,15 +248979,17 @@ function appResolver(checker) {
     return module !== void 0 && import_typescript10.default.isSourceFile(module) && importsHono(module);
   });
   const isHonoParam = (p) => p.type !== void 0 && import_typescript10.default.isTypeReferenceNode(p.type) && isHonoName(p.type.typeName);
-  const functionOf = (callee) => {
+  const functionOf = (callee, seen = /* @__PURE__ */ new Set()) => {
     const e = unwrap(callee);
+    if (seen.has(e)) return void 0;
+    seen.add(e);
     if (import_typescript10.default.isArrowFunction(e) || import_typescript10.default.isFunctionExpression(e)) return e;
     const d = import_typescript10.default.isIdentifier(e) ? declOf(e) : import_typescript10.default.isPropertyAccessExpression(e) ? declOf(e.name) : void 0;
     if (!d || d.getSourceFile().isDeclarationFile) return void 0;
     if (import_typescript10.default.isFunctionDeclaration(d) || import_typescript10.default.isMethodDeclaration(d)) return d;
-    const value = import_typescript10.default.isVariableDeclaration(d) ? d.initializer : import_typescript10.default.isPropertyAssignment(d) ? d.initializer : void 0;
-    const init = value ? unwrap(value) : void 0;
-    return init && (import_typescript10.default.isArrowFunction(init) || import_typescript10.default.isFunctionExpression(init)) ? init : void 0;
+    if (import_typescript10.default.isShorthandPropertyAssignment(d)) return functionOf(d.name, seen);
+    const value = import_typescript10.default.isVariableDeclaration(d) || import_typescript10.default.isPropertyAssignment(d) ? d.initializer : void 0;
+    return value ? functionOf(value, seen) : void 0;
   };
   const appOf = (expr, seen = /* @__PURE__ */ new Set()) => {
     const e = unwrap(expr);
@@ -249112,15 +249119,15 @@ function readApps(files, honoFiles, r, rel) {
   const middlewareCall = (call) => {
     const name = call.expression.name.text;
     const registration = registrationOf(call);
-    const guards = METHODS2.has(name) ? call.arguments.slice(1) : [];
+    const routeArgs = METHODS2.has(name) ? call.arguments.slice(1) : [];
     const app = r.appOf(call.expression.expression);
     if (app && METHODS2.has(name) && call.arguments.length >= 2) recordApp(call, app);
-    if (!registration && guards.length === 0) return;
+    if (!registration && routeArgs.length === 0) return;
     if (!app) {
       if (registration && !METHODS2.has(name) && honoFiles.has(call.getSourceFile())) at(call, `Hono ${name}() is on an app farol cannot follow: its middleware cannot be placed`);
       return;
     }
-    for (const a of /* @__PURE__ */ new Set([...registration?.args ?? [], ...guards])) if (unknownCode(a)) at(a, "Hono middleware comes from a parameter or a variable that can change: farol cannot find its code");
+    for (const a of /* @__PURE__ */ new Set([...registration?.args ?? [], ...routeArgs])) if (unknownCode(a)) at(a, "Hono middleware or handler comes from a parameter or a variable that can change: farol cannot find its code");
     if (!registration) return;
     if (name !== "onError") middleware.add(app);
     recordApp(call, app);
@@ -249431,13 +249438,14 @@ function resolverEntries(file2, code2, typeFields, withRest = true, hono = false
       if (runsCode(statement, honoNames) && !isBlank(text)) loadCode.push(text);
       continue;
     }
+    const owner = blank(statement).replace(blank(object2), "{}");
     for (const prop of object2.properties) {
       const text = blank(prop);
       items.push(text);
-      properties.push(text);
+      properties.push({ owner, text });
       if (runsCode(prop, honoNames) && !isBlank(text)) loadCode.push(text);
     }
-    items.push(blank(statement).replace(blank(object2), "{}"));
+    items.push(owner);
   }
   const rest = nodes.filter((n) => "receiver" in n);
   const impure = textsByKey(rest.filter((n) => !plainChain(n.receiver) || n.node.arguments.some((a) => runsCode(a, honoNames))).map((n) => ({ key: n.key, text: registrationText(n, sf) })));
@@ -249603,7 +249611,7 @@ function backendFileImpact(table3, file2, schema, resolvers) {
     }
     problems.push(...resolvers.problems);
     if (resolvers.restChanged) {
-      problems.push("code outside the resolvers changed (imports, helpers, module-level code or the order of calls): every resolver of the file may behave differently");
+      problems.push("code outside the resolvers changed (imports, helpers, module-level code, or the order or place of calls): every resolver of the file may behave differently");
       for (const k of resolvers.keys) hit(using(k), `module code of ${k}`);
     }
     if (resolvers.wide) hit([...resolvers.reachKeys], `module code of ${file2}`);
@@ -249621,13 +249629,25 @@ function backendFileImpact(table3, file2, schema, resolvers) {
     added: sortedUnique(added)
   };
 }
+var sameEndpoint = (a, b) => a === b || keyPath(a) === keyPath(b) && (a.startsWith("ALL ") || b.startsWith("ALL "));
+function duplicateEndpoints(impacts, baseRest) {
+  const out = new Map(impacts);
+  for (const [file2, impact] of impacts) {
+    const covered = sortedUnique([...baseRest].filter((k) => impact.addedOperations.some((n) => sameEndpoint(n, k))));
+    if (covered.length === 0) continue;
+    const affected = new Map(impact.affected);
+    for (const k of covered) if (!affected.has(k)) affected.set(k, `new handler in ${file2}`);
+    out.set(file2, { ...impact, additive: false, problems: [...impact.problems, ...covered.map((k) => `a new handler has the full key of existing endpoint ${k}`)], affected: new Map([...affected].sort(([a], [b]) => compareStrings(a, b))) });
+  }
+  return out;
+}
 function mountImpacts(table3, mounts, baseRest, impacts) {
   const out = new Map(impacts);
   for (const m of mounts) {
     const bases = table3.mountBases(m.id);
     const reached = table3.mountMiddleware(m.id) ? [...baseRest].filter((k) => bases.some((b) => overlaps(keyPath(k), b))) : [];
     const keys = table3.mountKeys(m.id);
-    const collides = (k) => keys.some((n) => n === k || keyPath(n) === keyPath(k) && (n.startsWith("ALL ") || k.startsWith("ALL ")));
+    const collides = (k) => keys.some((n) => sameEndpoint(n, k));
     const covered = sortedUnique([...reached, ...[...baseRest].filter(collides)]);
     const problems = [
       ...m.plain ? [] : [`mount ${m.prefix} was added with a call in its arguments: that code is not compared`],
@@ -249779,7 +249799,7 @@ async function backendImpacts(ctx, table3, files, roleOf, baseSha, headSha) {
   }
   const baseRest = table3.restKeysWithout(new Set(addedMounts.map((m) => m.id)), addedAnchors);
   const baseRoutes = table3.operations.filter((r) => r.key.includes(" ") ? baseRest.has(r.key) : !addedOperations.has(r.key));
-  return { impacts: mountImpacts(table3, addedMounts, baseRest, impacts), baseRoutes: { routes: baseRoutes, dynamic: [], sources: [] }, contracts: await schemaContracts(ctx, table3, files, baseSha) };
+  return { impacts: mountImpacts(table3, addedMounts, baseRest, duplicateEndpoints(impacts, baseRest)), baseRoutes: { routes: baseRoutes, dynamic: [], sources: [] }, contracts: await schemaContracts(ctx, table3, files, baseSha) };
 }
 async function schemaContracts(ctx, table3, files, baseSha) {
   if (table3.schemaDocs.length === 0) return { changes: [] };

@@ -1,5 +1,5 @@
 import { Kind, type DocumentNode } from 'graphql'
-import { backendFileImpact, compareCodeFile, mountImpacts, type AddedMount, type BackendFileImpact, type CodeFileChanges } from '../backend/impact.js'
+import { backendFileImpact, compareCodeFile, duplicateEndpoints, mountImpacts, type AddedMount, type BackendFileImpact, type CodeFileChanges } from '../backend/impact.js'
 import type { BackendTable } from '../backend/entrypoints.js'
 import { holdsApp } from '../backend/hono.js'
 import { resolverEntries } from '../backend/resolvers.js'
@@ -78,7 +78,7 @@ export async function backendImpacts(
   }
   const baseRest = table.restKeysWithout(new Set(addedMounts.map((m) => m.id)), addedAnchors)
   const baseRoutes = table.operations.filter((r) => (r.key.includes(' ') ? baseRest.has(r.key) : !addedOperations.has(r.key)))
-  return { impacts: mountImpacts(table, addedMounts, baseRest, impacts), baseRoutes: { routes: baseRoutes, dynamic: [], sources: [] }, contracts: await schemaContracts(ctx, table, files, baseSha) }
+  return { impacts: mountImpacts(table, addedMounts, baseRest, duplicateEndpoints(impacts, baseRest)), baseRoutes: { routes: baseRoutes, dynamic: [], sources: [] }, contracts: await schemaContracts(ctx, table, files, baseSha) }
 }
 
 /**

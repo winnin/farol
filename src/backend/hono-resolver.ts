@@ -60,15 +60,17 @@ export function appResolver(checker: ts.TypeChecker) {
       return module !== undefined && ts.isSourceFile(module) && importsHono(module)
     })
   const isHonoParam = (p: ts.ParameterDeclaration): boolean => p.type !== undefined && ts.isTypeReferenceNode(p.type) && isHonoName(p.type.typeName)
-  const functionOf = (callee: ts.Expression): ts.FunctionLikeDeclaration | undefined => {
+  const functionOf = (callee: ts.Expression, seen = new Set<ts.Node>()): ts.FunctionLikeDeclaration | undefined => {
     const e = unwrap(callee)
+    if (seen.has(e)) return undefined
+    seen.add(e)
     if (ts.isArrowFunction(e) || ts.isFunctionExpression(e)) return e
     const d = ts.isIdentifier(e) ? declOf(e) : ts.isPropertyAccessExpression(e) ? declOf(e.name) : undefined
     if (!d || d.getSourceFile().isDeclarationFile) return undefined
     if (ts.isFunctionDeclaration(d) || ts.isMethodDeclaration(d)) return d
-    const value = ts.isVariableDeclaration(d) ? d.initializer : ts.isPropertyAssignment(d) ? d.initializer : undefined
-    const init = value ? unwrap(value) : undefined
-    return init && (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) ? init : undefined
+    if (ts.isShorthandPropertyAssignment(d)) return functionOf(d.name, seen)
+    const value = ts.isVariableDeclaration(d) || ts.isPropertyAssignment(d) ? d.initializer : undefined
+    return value ? functionOf(value, seen) : undefined
   }
   const appOf = (expr: ts.Expression, seen = new Set<ts.Node>()): App | undefined => {
     const e = unwrap(expr)

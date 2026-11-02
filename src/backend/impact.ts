@@ -131,7 +131,7 @@ export function backendFileImpact(table: ImpactTable, file: string, schema: Sche
     // The endpoints under a removed mount are gone from the head: they cannot be named, the change still counts.
     problems.push(...resolvers.problems)
     if (resolvers.restChanged) {
-      problems.push('code outside the resolvers changed (imports, helpers, module-level code or the order of calls): every resolver of the file may behave differently')
+      problems.push('code outside the resolvers changed (imports, helpers, module-level code, or the order or place of calls): every resolver of the file may behave differently')
       for (const k of resolvers.keys) hit(using(k), `module code of ${k}`)
     }
     if (resolvers.wide) hit([...resolvers.reachKeys], `module code of ${file}`)
@@ -148,6 +148,22 @@ export function backendFileImpact(table: ImpactTable, file: string, schema: Sche
     addedOperations: sortedUnique(addedOperations),
     added: sortedUnique(added),
   }
+}
+
+/** Two keys that serve one request: the same key, or the same path with `ALL`. */
+const sameEndpoint = (a: string, b: string): boolean => a === b || (keyPath(a) === keyPath(b) && (a.startsWith('ALL ') || b.startsWith('ALL ')))
+
+/** Impacts with new handlers checked against the endpoints of other files: one with the full key of an existing endpoint changes it. */
+export function duplicateEndpoints(impacts: ReadonlyMap<string, BackendFileImpact>, baseRest: ReadonlySet<string>): Map<string, BackendFileImpact> {
+  const out = new Map(impacts)
+  for (const [file, impact] of impacts) {
+    const covered = sortedUnique([...baseRest].filter((k) => impact.addedOperations.some((n) => sameEndpoint(n, k))))
+    if (covered.length === 0) continue
+    const affected = new Map(impact.affected)
+    for (const k of covered) if (!affected.has(k)) affected.set(k, `new handler in ${file}`)
+    out.set(file, { ...impact, additive: false, problems: [...impact.problems, ...covered.map((k) => `a new handler has the full key of existing endpoint ${k}`)], affected: new Map([...affected].sort(([a], [b]) => compareStrings(a, b))) })
+  }
+  return out
 }
 
 /** A Hono mount a PR adds, with the file that adds it. */
@@ -174,7 +190,7 @@ export function mountImpacts(table: MountTable, mounts: readonly AddedMount[], b
     const bases = table.mountBases(m.id)
     const reached = table.mountMiddleware(m.id) ? [...baseRest].filter((k) => bases.some((b) => overlaps(keyPath(k), b))) : []
     const keys = table.mountKeys(m.id)
-    const collides = (k: string): boolean => keys.some((n) => n === k || (keyPath(n) === keyPath(k) && (n.startsWith('ALL ') || k.startsWith('ALL '))))
+    const collides = (k: string): boolean => keys.some((n) => sameEndpoint(n, k))
     const covered = sortedUnique([...reached, ...[...baseRest].filter(collides)])
     const problems = [
       ...(m.plain ? [] : [`mount ${m.prefix} was added with a call in its arguments: that code is not compared`]),
