@@ -5362,13 +5362,13 @@ ${lanes.join("\n")}
         }
         tracingEnabled2.instant = instant;
         const eventStack = [];
-        function push(phase, name, args, separateBeginAndEnd = false) {
+        function push2(phase, name, args, separateBeginAndEnd = false) {
           if (separateBeginAndEnd) {
             writeEvent("B", phase, name, args);
           }
           eventStack.push({ phase, name, args, time: 1e3 * timestamp(), separateBeginAndEnd });
         }
-        tracingEnabled2.push = push;
+        tracingEnabled2.push = push2;
         function pop(results) {
           Debug.assert(eventStack.length > 0);
           writeStackEvent(eventStack.length - 1, 1e3 * timestamp(), results);
@@ -212535,7 +212535,7 @@ var require_parse = __commonJS({
         state[type]--;
         stack.pop();
       };
-      const push = (tok) => {
+      const push2 = (tok) => {
         if (prev.type === "globstar") {
           const isBrace = state.braces > 0 && (tok.type === "comma" || tok.type === "brace");
           const isExtglob = tok.extglob === true || extglobs.length && (tok.type === "pipe" || tok.type === "paren");
@@ -212569,8 +212569,8 @@ var require_parse = __commonJS({
         token.tokensIndex = tokens2.length;
         const output2 = (opts.capture ? "(" : "") + token.open;
         increment("parens");
-        push({ type, value: value2, output: state.output ? "" : ONE_CHAR });
-        push({ type: "paren", extglob: true, value: advance(), output: output2 });
+        push2({ type, value: value2, output: state.output ? "" : ONE_CHAR });
+        push2({ type: "paren", extglob: true, value: advance(), output: output2 });
         extglobs.push(token);
       };
       const extglobClose = (token) => {
@@ -212590,7 +212590,7 @@ var require_parse = __commonJS({
           }
           state.output = token.output + open2.output;
           state.backtrack = true;
-          push({ type: "paren", extglob: true, value, output: "" });
+          push2({ type: "paren", extglob: true, value, output: "" });
           decrement("parens");
           return;
         }
@@ -212612,7 +212612,7 @@ var require_parse = __commonJS({
             state.negatedExtglob = true;
           }
         }
-        push({ type: "paren", extglob: true, value, output: output2 });
+        push2({ type: "paren", extglob: true, value, output: output2 });
         decrement("parens");
       };
       if (opts.fastpaths !== false && !/(^[*!]|[/()[\]{}"])/.test(input2)) {
@@ -212673,7 +212673,7 @@ var require_parse = __commonJS({
           }
           if (!next) {
             value += "\\";
-            push({ type: "text", value });
+            push2({ type: "text", value });
             continue;
           }
           const match = /^\\+/.exec(remaining());
@@ -212691,7 +212691,7 @@ var require_parse = __commonJS({
             value += advance();
           }
           if (state.brackets === 0) {
-            push({ type: "text", value });
+            push2({ type: "text", value });
             continue;
           }
         }
@@ -212704,9 +212704,9 @@ var require_parse = __commonJS({
                 const idx = prev.value.lastIndexOf("[");
                 const pre = prev.value.slice(0, idx);
                 const rest2 = prev.value.slice(idx + 2);
-                const posix19 = POSIX_REGEX_SOURCE[rest2];
-                if (posix19) {
-                  prev.value = pre + posix19;
+                const posix20 = POSIX_REGEX_SOURCE[rest2];
+                if (posix20) {
+                  prev.value = pre + posix20;
                   state.backtrack = true;
                   advance();
                   if (!bos.output && tokens2.indexOf(prev) === 1) {
@@ -212739,13 +212739,13 @@ var require_parse = __commonJS({
         if (value === '"') {
           state.quotes = state.quotes === 1 ? 0 : 1;
           if (opts.keepQuotes === true) {
-            push({ type: "text", value });
+            push2({ type: "text", value });
           }
           continue;
         }
         if (value === "(") {
           increment("parens");
-          push({ type: "paren", value });
+          push2({ type: "paren", value });
           continue;
         }
         if (value === ")") {
@@ -212757,7 +212757,7 @@ var require_parse = __commonJS({
             extglobClose(extglobs.pop());
             continue;
           }
-          push({ type: "paren", value, output: state.parens ? ")" : "\\)" });
+          push2({ type: "paren", value, output: state.parens ? ")" : "\\)" });
           decrement("parens");
           continue;
         }
@@ -212770,19 +212770,19 @@ var require_parse = __commonJS({
           } else {
             increment("brackets");
           }
-          push({ type: "bracket", value });
+          push2({ type: "bracket", value });
           continue;
         }
         if (value === "]") {
           if (opts.nobracket === true || prev && prev.type === "bracket" && prev.value.length === 1) {
-            push({ type: "text", value, output: `\\${value}` });
+            push2({ type: "text", value, output: `\\${value}` });
             continue;
           }
           if (state.brackets === 0) {
             if (opts.strictBrackets === true) {
               throw new SyntaxError(syntaxError2("opening", "["));
             }
-            push({ type: "text", value, output: `\\${value}` });
+            push2({ type: "text", value, output: `\\${value}` });
             continue;
           }
           decrement("brackets");
@@ -212816,13 +212816,13 @@ var require_parse = __commonJS({
             tokensIndex: state.tokens.length
           };
           braces.push(open2);
-          push(open2);
+          push2(open2);
           continue;
         }
         if (value === "}") {
           const brace = braces[braces.length - 1];
           if (opts.nobrace === true || !brace) {
-            push({ type: "text", value, output: value });
+            push2({ type: "text", value, output: value });
             continue;
           }
           let output2 = ")";
@@ -212851,7 +212851,7 @@ var require_parse = __commonJS({
               state.output += t.output || t.value;
             }
           }
-          push({ type: "brace", value, output: output2 });
+          push2({ type: "brace", value, output: output2 });
           decrement("braces");
           braces.pop();
           continue;
@@ -212860,7 +212860,7 @@ var require_parse = __commonJS({
           if (extglobs.length > 0) {
             extglobs[extglobs.length - 1].conditions++;
           }
-          push({ type: "text", value });
+          push2({ type: "text", value });
           continue;
         }
         if (value === ",") {
@@ -212870,7 +212870,7 @@ var require_parse = __commonJS({
             brace.comma = true;
             output2 = "|";
           }
-          push({ type: "comma", value, output: output2 });
+          push2({ type: "comma", value, output: output2 });
           continue;
         }
         if (value === "/") {
@@ -212882,7 +212882,7 @@ var require_parse = __commonJS({
             prev = bos;
             continue;
           }
-          push({ type: "slash", value, output: SLASH_LITERAL });
+          push2({ type: "slash", value, output: SLASH_LITERAL });
           continue;
         }
         if (value === ".") {
@@ -212896,15 +212896,15 @@ var require_parse = __commonJS({
             continue;
           }
           if (state.braces + state.parens === 0 && prev.type !== "bos" && prev.type !== "slash") {
-            push({ type: "text", value, output: DOT_LITERAL });
+            push2({ type: "text", value, output: DOT_LITERAL });
             continue;
           }
-          push({ type: "dot", value, output: DOT_LITERAL });
+          push2({ type: "dot", value, output: DOT_LITERAL });
           continue;
         }
         if (value === "?") {
-          const isGroup = prev && prev.value === "(";
-          if (!isGroup && opts.noextglob !== true && peek() === "(" && peek(2) !== "?") {
+          const isGroup2 = prev && prev.value === "(";
+          if (!isGroup2 && opts.noextglob !== true && peek() === "(" && peek(2) !== "?") {
             extglobOpen("qmark", value);
             continue;
           }
@@ -212914,14 +212914,14 @@ var require_parse = __commonJS({
             if (prev.value === "(" && !/[!=<:]/.test(next) || next === "<" && !/<([!=]|\w+>)/.test(remaining())) {
               output2 = `\\${value}`;
             }
-            push({ type: "text", value, output: output2 });
+            push2({ type: "text", value, output: output2 });
             continue;
           }
           if (opts.dot !== true && (prev.type === "slash" || prev.type === "bos")) {
-            push({ type: "qmark", value, output: QMARK_NO_DOT });
+            push2({ type: "qmark", value, output: QMARK_NO_DOT });
             continue;
           }
-          push({ type: "qmark", value, output: QMARK });
+          push2({ type: "qmark", value, output: QMARK });
           continue;
         }
         if (value === "!") {
@@ -212942,22 +212942,22 @@ var require_parse = __commonJS({
             continue;
           }
           if (prev && prev.value === "(" || opts.regex === false) {
-            push({ type: "plus", value, output: PLUS_LITERAL });
+            push2({ type: "plus", value, output: PLUS_LITERAL });
             continue;
           }
           if (prev && (prev.type === "bracket" || prev.type === "paren" || prev.type === "brace") || state.parens > 0) {
-            push({ type: "plus", value });
+            push2({ type: "plus", value });
             continue;
           }
-          push({ type: "plus", value: PLUS_LITERAL });
+          push2({ type: "plus", value: PLUS_LITERAL });
           continue;
         }
         if (value === "@") {
           if (opts.noextglob !== true && peek() === "(" && peek(2) !== "?") {
-            push({ type: "at", extglob: true, value, output: "" });
+            push2({ type: "at", extglob: true, value, output: "" });
             continue;
           }
-          push({ type: "text", value });
+          push2({ type: "text", value });
           continue;
         }
         if (value !== "*") {
@@ -212969,7 +212969,7 @@ var require_parse = __commonJS({
             value += match[0];
             state.index += match[0].length;
           }
-          push({ type: "text", value });
+          push2({ type: "text", value });
           continue;
         }
         if (prev && (prev.type === "globstar" || prev.star === true)) {
@@ -212997,13 +212997,13 @@ var require_parse = __commonJS({
           const isStart = prior.type === "slash" || prior.type === "bos";
           const afterStar = before && (before.type === "star" || before.type === "globstar");
           if (opts.bash === true && (!isStart || rest[0] && rest[0] !== "/")) {
-            push({ type: "star", value, output: "" });
+            push2({ type: "star", value, output: "" });
             continue;
           }
           const isBrace = state.braces > 0 && (prior.type === "comma" || prior.type === "brace");
           const isExtglob = extglobs.length && (prior.type === "pipe" || prior.type === "paren");
           if (!isStart && prior.type !== "paren" && !isBrace && !isExtglob) {
-            push({ type: "star", value, output: "" });
+            push2({ type: "star", value, output: "" });
             continue;
           }
           while (rest.slice(0, 3) === "/**") {
@@ -213045,7 +213045,7 @@ var require_parse = __commonJS({
             state.output += prior.output + prev.output;
             state.globstar = true;
             consume(value + advance());
-            push({ type: "slash", value: "/", output: "" });
+            push2({ type: "slash", value: "/", output: "" });
             continue;
           }
           if (prior.type === "bos" && rest[0] === "/") {
@@ -213055,7 +213055,7 @@ var require_parse = __commonJS({
             state.output = prev.output;
             state.globstar = true;
             consume(value + advance());
-            push({ type: "slash", value: "/", output: "" });
+            push2({ type: "slash", value: "/", output: "" });
             continue;
           }
           state.output = state.output.slice(0, -prev.output.length);
@@ -213073,12 +213073,12 @@ var require_parse = __commonJS({
           if (prev.type === "bos" || prev.type === "slash") {
             token.output = nodot + token.output;
           }
-          push(token);
+          push2(token);
           continue;
         }
         if (prev && (prev.type === "bracket" || prev.type === "paren") && opts.regex === true) {
           token.output = value;
-          push(token);
+          push2(token);
           continue;
         }
         if (state.index === state.start || prev.type === "slash" || prev.type === "dot") {
@@ -213097,7 +213097,7 @@ var require_parse = __commonJS({
             prev.output += ONE_CHAR;
           }
         }
-        push(token);
+        push2(token);
       }
       while (state.brackets > 0) {
         if (opts.strictBrackets === true) throw new SyntaxError(syntaxError2("closing", "]"));
@@ -213115,7 +213115,7 @@ var require_parse = __commonJS({
         decrement("braces");
       }
       if (opts.strictSlashes !== true && (prev.type === "star" || prev.type === "bracket")) {
-        push({ type: "maybe_slash", value: "", output: `${SLASH_LITERAL}?` });
+        push2({ type: "maybe_slash", value: "", output: `${SLASH_LITERAL}?` });
       }
       if (state.backtrack === true) {
         state.output = "";
@@ -213223,7 +213223,7 @@ var require_picomatch = __commonJS({
         throw new TypeError("Expected pattern to be a non-empty string");
       }
       const opts = options || {};
-      const posix19 = opts.windows;
+      const posix20 = opts.windows;
       const regex = isState ? picomatch4.compileRe(glob, options) : picomatch4.makeRe(glob, options, false, true);
       const state = regex.state;
       delete regex.state;
@@ -213233,8 +213233,8 @@ var require_picomatch = __commonJS({
         isIgnored = picomatch4(opts.ignore, ignoreOpts, returnState);
       }
       const matcher2 = (input2, returnObject = false) => {
-        const { isMatch, match, output: output2 } = picomatch4.test(input2, regex, options, { glob, posix: posix19 });
-        const result = { glob, state, regex, posix: posix19, input: input2, output: output2, match, isMatch };
+        const { isMatch, match, output: output2 } = picomatch4.test(input2, regex, options, { glob, posix: posix20 });
+        const result = { glob, state, regex, posix: posix20, input: input2, output: output2, match, isMatch };
         if (typeof opts.onResult === "function") {
           opts.onResult(result);
         }
@@ -213259,7 +213259,7 @@ var require_picomatch = __commonJS({
       }
       return matcher2;
     };
-    picomatch4.test = (input2, regex, options, { glob, posix: posix19 } = {}) => {
+    picomatch4.test = (input2, regex, options, { glob, posix: posix20 } = {}) => {
       if (typeof input2 !== "string") {
         throw new TypeError("Expected input to be a string");
       }
@@ -213267,7 +213267,7 @@ var require_picomatch = __commonJS({
         return { isMatch: false, output: "" };
       }
       const opts = options || {};
-      const format = opts.format || (posix19 ? utils.toPosixSlashes : null);
+      const format = opts.format || (posix20 ? utils.toPosixSlashes : null);
       let match = input2 === glob;
       let output2 = match && format ? format(input2) : input2;
       if (match === false) {
@@ -213276,16 +213276,16 @@ var require_picomatch = __commonJS({
       }
       if (match === false || opts.capture === true) {
         if (opts.matchBase === true || opts.basename === true) {
-          match = picomatch4.matchBase(input2, regex, options, posix19);
+          match = picomatch4.matchBase(input2, regex, options, posix20);
         } else {
           match = regex.exec(output2);
         }
       }
       return { isMatch: Boolean(match), match, output: output2 };
     };
-    picomatch4.matchBase = (input2, glob, options, posix19 = options && options.windows) => {
+    picomatch4.matchBase = (input2, glob, options, posix20 = options && options.windows) => {
       const regex = glob instanceof RegExp ? glob : picomatch4.makeRe(glob, options);
-      return regex.test(utils.basename(input2, { windows: posix19 }));
+      return regex.test(utils.basename(input2, { windows: posix20 }));
     };
     picomatch4.isMatch = (str2, patterns, options) => picomatch4(patterns, options)(str2);
     picomatch4.parse = (pattern, options) => {
@@ -236557,10 +236557,10 @@ var ConfigSchema = external_exports.object({
     context: external_exports.record(external_exports.string().min(1), globs).default({})
   }).strict().prefault({}),
   routes: external_exports.object({
-    /** react-router: a route table in `file`. next, tanstack-router: file-system routing under `dir`. */
-    adapter: external_exports.enum(["react-router", "next", "tanstack-router"]).default("react-router"),
+    /** react-router: a route table in `file`. next, tanstack-router, expo-router: file-system routing under `dir`. */
+    adapter: external_exports.enum(["react-router", "next", "tanstack-router", "expo-router"]).default("react-router"),
     file: external_exports.string().min(1, 'routes.file must point to the file with the route table, e.g. "src/routes.tsx"').optional(),
-    /** File-system routers: next → the directory holding pages/ and app/ (default: the project, or its src/); tanstack-router → the routes directory (default "src/routes"). */
+    /** File-system routers: next → the directory holding pages/ and app/ (default: the project, or its src/); tanstack-router → the routes directory (default "src/routes"); expo-router → the routes directory, or a directory holding app/ or src/app/ (default: the project). */
     dir: external_exports.string().optional(),
     /** Other modules that only define routes (split route trees): they get the routes rule instead of the source rule. */
     extraFiles: globs.default([])
@@ -236599,7 +236599,7 @@ var ConfigSchema = external_exports.object({
   }).strict().prefault({})
 }).strict().superRefine((config2, ctx) => {
   if (config2.language !== "typescript" && config2.surface !== "backend") ctx.addIssue({ code: "custom", path: ["surface"], message: `a ${config2.language === "go" ? "Go" : "Python"} project is a backend: set "surface": "backend"` });
-  if (config2.surface === "frontend" && config2.routes === void 0) ctx.addIssue({ code: "custom", path: ["routes"], message: 'routes is required for a frontend (routes.file for React Router, or routes.adapter "next" / "tanstack-router"), or set "surface": "backend"' });
+  if (config2.surface === "frontend" && config2.routes === void 0) ctx.addIssue({ code: "custom", path: ["routes"], message: 'routes is required for a frontend (routes.file for React Router, or routes.adapter "next" / "tanstack-router" / "expo-router"), or set "surface": "backend"' });
 }).transform((config2) => ({
   ...config2,
   routes: config2.routes ?? { adapter: "react-router", file: "", extraFiles: [] },
@@ -237125,7 +237125,7 @@ async function loadContext(options) {
 
 // src/cli/analyze.ts
 import { readFileSync as readFileSync4 } from "fs";
-import { posix as posix14, resolve as resolve3 } from "path";
+import { posix as posix15, resolve as resolve3 } from "path";
 
 // src/classify/classify.ts
 import { posix } from "path";
@@ -248499,7 +248499,7 @@ function commandBelow(expr) {
 }
 function cliNodes(sf) {
   const out = [];
-  const push = (spec, node2, value) => {
+  const push2 = (spec, node2, value) => {
     if (spec === void 0) return;
     const text = literal2(spec);
     if (text === void 0) {
@@ -248515,10 +248515,10 @@ function cliNodes(sf) {
       const args = node2.arguments;
       if (method === "action" && args.length === 1 && isFunctionLike(args[0])) {
         const command = commandBelow(node2.expression.expression);
-        if (command !== void 0) push(command.arguments[0], node2, args[0]);
+        if (command !== void 0) push2(command.arguments[0], node2, args[0]);
       } else if (method === "command" && args.length >= 3 && isDescription(args[1]) && isFunctionLike(args[args.length - 1])) {
         const handler = args[args.length - 1];
-        if (handler !== void 0) push(args[0], node2, handler);
+        if (handler !== void 0) push2(args[0], node2, handler);
       }
     }
     import_typescript7.default.forEachChild(node2, visit3);
@@ -249549,7 +249549,7 @@ function writeStdout(text) {
 
 // src/cli/workspace.ts
 import { readdirSync as readdirSync3 } from "fs";
-import { posix as posix12 } from "path";
+import { posix as posix13 } from "path";
 
 // src/backend/entrypoints.ts
 import { posix as posix7 } from "path";
@@ -249974,7 +249974,7 @@ function createProjectProgram(input2) {
   return { program: program3, options, configPath, resolutionHost: host, resolutionCache, fs: fs2 };
 }
 
-// src/routes/next/index.ts
+// src/routes/expo-router/index.ts
 import { posix as posix11 } from "path";
 
 // src/routes/files.ts
@@ -250009,18 +250009,90 @@ function routeTable(routes, dynamic, sources) {
   };
 }
 
-// src/routes/next/index.ts
+// src/routes/expo-router/index.ts
+var PLATFORMS = /* @__PURE__ */ new Set(["ios", "android", "native", "web"]);
+var ROOT_MODULES = ["+middleware", "+native-intent", "+html"];
+var API_ROOT_MODULES = ["+middleware"];
+var API_SUFFIX = "+api";
+function has(files, dir) {
+  return files.some((f) => f.startsWith(`${dir}/`));
+}
+function routesDir(input2) {
+  const at = (d) => input2.file === "" ? d : `${input2.file}/${d}`;
+  const isRootLayout = (f) => splitPlatform(routeModulePath(input2.file, f) ?? "").stem === "_layout";
+  if (posix11.basename(input2.file) === "app" || input2.files.some(isRootLayout)) return input2.file;
+  return [at("app"), at("src/app")].find((d) => has(input2.files, d)) ?? null;
+}
+function splitPlatform(name) {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 && PLATFORMS.has(name.slice(dot + 1)) ? { stem: name.slice(0, dot), platform: true } : { stem: name, platform: false };
+}
+function isGroup(segment) {
+  return segment.startsWith("(") && segment.endsWith(")");
+}
 function urlSegment(segment) {
+  if (isGroup(segment)) return "";
+  if (segment.startsWith("[...")) return "*";
+  if (segment.startsWith("[") && segment.endsWith("]")) return `:${segment.slice(1, -1)}`;
+  return segment;
+}
+function push(map2, key, file2) {
+  map2.set(key, [...map2.get(key) ?? [], file2]);
+}
+function extract(input2) {
+  const dir = routesDir(input2);
+  if (dir === null) return routeTable([], [{ file: input2.file === "" ? "." : input2.file, line: 1, detail: `no Expo Router routes directory found: expected app/ or src/app/ in ${input2.file === "" ? "the project" : input2.file}, or set routes.dir to it` }], []);
+  const dynamic = [];
+  const layoutsIn = /* @__PURE__ */ new Map();
+  const root = /* @__PURE__ */ new Map();
+  const found = /* @__PURE__ */ new Map();
+  for (const file2 of input2.files) {
+    const rel = routeModulePath(dir, file2);
+    if (rel === null) continue;
+    const folder = rel.split("/");
+    const { stem: stem2, platform } = splitPlatform(folder.pop() ?? "");
+    const api = stem2.endsWith(API_SUFFIX);
+    if (stem2 === "_layout") push(layoutsIn, folder.join("/"), file2);
+    else if (folder.length === 0 && ROOT_MODULES.includes(stem2)) push(root, stem2, file2);
+    else if (api && platform) dynamic.push({ file: file2, line: 1, detail: "Expo Router API routes cannot have platform extensions" });
+    else if (stem2.startsWith("+") && stem2 !== "+not-found" && !api || isGroup(stem2)) dynamic.push({ file: file2, line: 1, detail: `${stem2} is not an Expo Router route name` });
+    else {
+      const key = `/${[...folder, stem2].join("/")}`;
+      const route = found.get(key) ?? { folder, name: api ? stem2.slice(0, -API_SUFFIX.length) : stem2, api, files: [], universal: null };
+      if (!platform && route.universal !== null) dynamic.push({ file: file2, line: 1, detail: `route ${key} is defined twice: ${route.universal} and ${file2}` });
+      if (!platform) route.universal ??= file2;
+      route.files.push(file2);
+      found.set(key, route);
+    }
+  }
+  const rootModules = (names) => names.flatMap((n) => [...root.get(n) ?? []].sort(compareStrings));
+  const routes = [];
+  for (const [key, r] of found) {
+    const layouts = rootModules(r.api ? API_ROOT_MODULES : ROOT_MODULES);
+    if (!r.api) for (let i = 0; i <= r.folder.length; i++) layouts.push(...[...layoutsIn.get(r.folder.slice(0, i).join("/")) ?? []].sort(compareStrings));
+    const modules = [...r.files].sort(compareStrings);
+    const index = r.name === "index";
+    const last = r.name === "+not-found" ? ["*"] : index ? [] : [r.name];
+    routes.push({ key, path: urlPath([...r.folder, ...last].map(urlSegment)), index, entry: r.universal ?? modules[0] ?? null, modules, layouts });
+  }
+  if (routes.length === 0) dynamic.push({ file: dir === "" ? "." : dir, line: 1, detail: `no Expo Router route found: expected route modules under ${dir === "" ? "the project" : dir}` });
+  return routeTable(routes, dynamic, routes.flatMap((r) => [...r.modules, ...r.layouts]));
+}
+var expoRouterAdapter = { name: "expo-router", source: "directory", extract };
+
+// src/routes/next/index.ts
+import { posix as posix12 } from "path";
+function urlSegment2(segment) {
   if (segment.startsWith("[[...") || segment.startsWith("[...")) return "*";
   if (segment.startsWith("[") && segment.endsWith("]")) return `:${segment.slice(1, -1)}`;
   return segment;
 }
-function has(files, dir) {
+function has2(files, dir) {
   return files.some((f) => f.startsWith(`${dir}/`));
 }
 function rootDir(input2) {
   const at = (d) => input2.file === "" ? d : `${input2.file}/${d}`;
-  if (!has(input2.files, at("pages")) && !has(input2.files, at("app")) && (has(input2.files, at("src/pages")) || has(input2.files, at("src/app")))) return at("src");
+  if (!has2(input2.files, at("pages")) && !has2(input2.files, at("app")) && (has2(input2.files, at("src/pages")) || has2(input2.files, at("src/app")))) return at("src");
   return input2.file;
 }
 function moduleIn(files, dir, name) {
@@ -250040,7 +250112,7 @@ function pagesRoutes(root, files, fileSet, middleware) {
     if (rel === null || rel === "_app" || rel === "_document") continue;
     const parts = rel.split("/");
     const index = parts[parts.length - 1] === "index";
-    const path3 = urlPath((index ? parts.slice(0, -1) : parts).map(urlSegment));
+    const path3 = urlPath((index ? parts.slice(0, -1) : parts).map(urlSegment2));
     const api = parts[0] === "api";
     const layouts = [...middleware, ...api ? [] : [document, app].filter((m) => m !== null)];
     routes.push({ key: path3, path: path3, index, entry: file2, modules: [file2], layouts });
@@ -250077,22 +250149,22 @@ function appRoutes(root, files, fileSet, middleware) {
         if (m !== null) boundaries.push(m);
       }
     }
-    const path3 = urlPath(parts.filter((p) => !isHiddenSegment(p)).map(urlSegment));
+    const path3 = urlPath(parts.filter((p) => !isHiddenSegment(p)).map(urlSegment2));
     const key = `/${parts.join("/")}`;
     routes.push({ key, path: path3, index: true, entry: file2, modules: [file2, ...boundaries].sort(), layouts: name === "route" ? [...middleware] : layouts });
   }
   return routes;
 }
-function extract(input2) {
+function extract2(input2) {
   const root = rootDir(input2);
   const fileSet = new Set(input2.files);
   const middleware = ["middleware", "proxy"].map((n) => moduleIn(fileSet, root, n)).filter((m) => m !== null);
   const routes = [...pagesRoutes(root, input2.files, fileSet, middleware), ...appRoutes(root, input2.files, fileSet, middleware)];
   const dynamic = [];
-  if (routes.length === 0) dynamic.push({ file: root === "" ? "." : root, line: 1, detail: `no Next.js route found: expected modules under ${posix11.join(root, "pages")} or page/route modules under ${posix11.join(root, "app")}` });
+  if (routes.length === 0) dynamic.push({ file: root === "" ? "." : root, line: 1, detail: `no Next.js route found: expected modules under ${posix12.join(root, "pages")} or page/route modules under ${posix12.join(root, "app")}` });
   return routeTable(routes, dynamic, routes.flatMap((r) => [...r.entry === null ? [] : [r.entry], ...r.modules, ...r.layouts]));
 }
-var nextAdapter = { name: "next", source: "directory", extract };
+var nextAdapter = { name: "next", source: "directory", extract: extract2 };
 
 // src/routes/react-router/index.ts
 var import_typescript19 = __toESM(require_typescript(), 1);
@@ -250713,7 +250785,7 @@ function collectRoots(scope, collector) {
   }
   return roots;
 }
-function extract2(input2) {
+function extract3(input2) {
   const registry2 = new Registry(input2);
   const scope = registry2.scopeFor(input2.file, input2.code);
   const collector = new RouteCollector();
@@ -250729,7 +250801,7 @@ function extract2(input2) {
   const sources = registry2.sources();
   return { routes, dynamic, sources: sources.length > 0 ? sources : [input2.file] };
 }
-var reactRouterAdapter = { name: "react-router", source: "file", extract: extract2 };
+var reactRouterAdapter = { name: "react-router", source: "file", extract: extract3 };
 
 // src/routes/tanstack-router/index.ts
 var import_typescript20 = __toESM(require_typescript(), 1);
@@ -250760,7 +250832,7 @@ function routesOf(file2, code2, dynamic) {
   visit3(sf);
   return found;
 }
-function urlSegment2(segment) {
+function urlSegment3(segment) {
   if (segment.startsWith("_") || segment.startsWith("(") && segment.endsWith(")")) return "";
   let s = segment.endsWith("_") ? segment.slice(0, -1) : segment;
   s = s.replaceAll("[", "").replaceAll("]", "");
@@ -250775,7 +250847,7 @@ function ancestorIds(id) {
   if (id.endsWith("/") && parts.length > 0) out.push(`/${parts.join("/")}`);
   return out;
 }
-function extract3(input2) {
+function extract4(input2) {
   const dynamic = [];
   const filesOf = /* @__PURE__ */ new Map();
   const sources = [];
@@ -250807,15 +250879,15 @@ function extract3(input2) {
       const m = moduleOf2(a);
       return m === null ? [] : [m];
     })];
-    routes.push({ key: id, path: urlPath(id.split("/").map(urlSegment2)), index: id.endsWith("/"), entry: moduleOf2(id), modules, layouts });
+    routes.push({ key: id, path: urlPath(id.split("/").map(urlSegment3)), index: id.endsWith("/"), entry: moduleOf2(id), modules, layouts });
   }
   if (routes.length === 0) dynamic.push({ file: input2.file, line: 1, detail: "no TanStack Router route found: expected modules calling createFileRoute('<id>') under the routes directory" });
   return routeTable(routes, dynamic, sources);
 }
-var tanstackRouterAdapter = { name: "tanstack-router", source: "directory", extract: extract3 };
+var tanstackRouterAdapter = { name: "tanstack-router", source: "directory", extract: extract4 };
 
 // src/routes/index.ts
-var ADAPTERS = { "react-router": reactRouterAdapter, next: nextAdapter, "tanstack-router": tanstackRouterAdapter };
+var ADAPTERS = { "react-router": reactRouterAdapter, next: nextAdapter, "tanstack-router": tanstackRouterAdapter, "expo-router": expoRouterAdapter };
 function getRouteAdapter(name) {
   const adapter = ADAPTERS[name];
   if (!adapter) throw new Error(`unknown route adapter "${name}"`);
@@ -250828,7 +250900,7 @@ function createRepoRoleOf(ctx) {
   const roleOf = createRoleMatcher(ctx.config);
   const isInfra = createInfraMatcher(ctx.config);
   return (repoPath) => {
-    const rel = ctx.projectPrefix === "" ? repoPath : posix12.relative(ctx.projectPrefix, repoPath);
+    const rel = ctx.projectPrefix === "" ? repoPath : posix13.relative(ctx.projectPrefix, repoPath);
     if (rel.startsWith("../") || rel === "..") {
       if (roleOf(rel) === "global") return "global";
       return isInfra(repoPath) ? "infra" : "outside";
@@ -250838,7 +250910,7 @@ function createRepoRoleOf(ctx) {
   };
 }
 function projectRelative(ctx, repoPath) {
-  return ctx.projectPrefix === "" ? repoPath : posix12.relative(ctx.projectPrefix, repoPath);
+  return ctx.projectPrefix === "" ? repoPath : posix13.relative(ctx.projectPrefix, repoPath);
 }
 function createIgnoreOf(ctx, extra, base = ctx.config.ignore) {
   const ignored = createIgnoreMatcher([...base, ...extra]);
@@ -250854,10 +250926,10 @@ function createAnalysisRoleOf(ctx, graphNodes, backend) {
   };
   const prefix = ctx.projectPrefix;
   const nodeDirs = /* @__PURE__ */ new Set();
-  for (const node2 of graphNodes) for (let d = posix12.dirname(node2); d !== "." && !nodeDirs.has(d); d = posix12.dirname(d)) nodeDirs.add(d);
+  for (const node2 of graphNodes) for (let d = posix13.dirname(node2); d !== "." && !nodeDirs.has(d); d = posix13.dirname(d)) nodeDirs.add(d);
   return (repoPath) => {
-    const name = posix12.basename(repoPath);
-    const dir = posix12.dirname(repoPath) === "." ? "" : posix12.dirname(repoPath);
+    const name = posix13.basename(repoPath);
+    const dir = posix13.dirname(repoPath) === "." ? "" : posix13.dirname(repoPath);
     const inside = prefix === "" || dir === prefix || dir.startsWith(`${prefix}/`);
     const aboveOrSelf = dir === "" || dir === prefix || prefix.startsWith(`${dir}/`);
     const ours = inside || ECOSYSTEM_FILES[ctx.config.language].has(name);
@@ -250867,24 +250939,24 @@ function createAnalysisRoleOf(ctx, graphNodes, backend) {
   };
 }
 function toRepoPath(ctx, absolute) {
-  return posix12.relative(toPosix(ctx.repoRoot), toPosix(absolute));
+  return posix13.relative(toPosix(ctx.repoRoot), toPosix(absolute));
 }
 function projectToRepoPath(ctx, projectPath) {
-  return posix12.normalize(posix12.join(ctx.projectPrefix, toPosix(projectPath)));
+  return posix13.normalize(posix13.join(ctx.projectPrefix, toPosix(projectPath)));
 }
 async function createFileSystem(ctx, ref) {
   const disk = createDiskFileSystem();
   if (ref === void 0) return { fs: disk };
   const treeFiles = await listFiles(ctx.repoRoot, ref);
-  const wanted = treeFiles.filter((f) => SOURCE_EXTENSIONS.has(posix12.extname(f)));
+  const wanted = treeFiles.filter((f) => SOURCE_EXTENSIONS.has(posix13.extname(f)));
   const contents = await readFiles(ctx.repoRoot, ref, wanted);
   return { fs: createTreeFileSystem({ repoRoot: ctx.repoRoot, files: treeFiles, contents, fallback: disk }), treeFiles };
 }
 function moduleResolver(ctx, resolver) {
   const repoRoot2 = toPosix(ctx.repoRoot);
   return (specifier, fromFile) => {
-    const r = resolveSpecifier(resolver, repoRoot2, posix12.join(repoRoot2, fromFile), specifier, void 0);
-    if (r.kind === "module" || r.kind === "asset") return { kind: "module", file: posix12.relative(repoRoot2, r.file) };
+    const r = resolveSpecifier(resolver, repoRoot2, posix13.join(repoRoot2, fromFile), specifier, void 0);
+    if (r.kind === "module" || r.kind === "asset") return { kind: "module", file: posix13.relative(repoRoot2, r.file) };
     if (r.kind === "external") return { kind: "external", specifier };
     return { kind: "unresolved" };
   };
@@ -250896,14 +250968,14 @@ function extractRoutes(ctx, resolver, routesFile, code2, files = []) {
     code: code2,
     files,
     resolve: moduleResolver(ctx, resolver),
-    read: (file2) => resolver.fs.readFile(posix12.join(repoRoot2, file2))
+    read: (file2) => resolver.fs.readFile(posix13.join(repoRoot2, file2))
   });
 }
 function routesFromDirectory(ctx) {
   return getRouteAdapter(ctx.config.routes.adapter).source === "directory";
 }
 function routesDirectory(ctx) {
-  const dir = posix12.normalize(posix12.join(ctx.projectPrefix, ctx.config.routes.dir ?? ""));
+  const dir = posix13.normalize(posix13.join(ctx.projectPrefix, ctx.config.routes.dir ?? ""));
   return dir === "." ? "" : dir;
 }
 function filesUnder(files, dir) {
@@ -250928,10 +251000,10 @@ async function loadWorkspace(ctx, ref, timings, now = () => performance.now()) {
   const projectDir = toPosix(ctx.projectDir);
   if (ctx.config.surface === "backend") return loadBackendWorkspace(ctx, fs2, treeFiles, lap);
   if (routesFromDirectory(ctx)) return loadDirectoryRoutesWorkspace(ctx, fs2, treeFiles, lap);
-  const routesAbs = posix12.join(projectDir, ctx.config.routes.file);
+  const routesAbs = posix13.join(projectDir, ctx.config.routes.file);
   const routesCode = fs2.readFile(routesAbs);
   if (routesCode === void 0) throw new RoutesFileMissingError(ctx.config.routes.file, ref);
-  const project = createProjectProgram({ fs: fs2, projectDir, tsconfigPath: posix12.join(projectDir, ctx.config.tsconfig), anchorFile: routesAbs });
+  const project = createProjectProgram({ fs: fs2, projectDir, tsconfigPath: posix13.join(projectDir, ctx.config.tsconfig), anchorFile: routesAbs });
   lap("program");
   const roleOf = createRepoRoleOf(ctx);
   const graph = buildImportGraph(project, {
@@ -250951,7 +251023,7 @@ function loadDirectoryRoutesWorkspace(ctx, fs2, treeFiles, lap) {
   const repoRoot2 = toPosix(ctx.repoRoot);
   const dir = routesDirectory(ctx);
   const files = filesUnder(treeFiles ?? diskFiles(projectDir, repoRoot2), dir);
-  const project = createProjectProgram({ fs: fs2, projectDir, tsconfigPath: posix12.join(projectDir, ctx.config.tsconfig) });
+  const project = createProjectProgram({ fs: fs2, projectDir, tsconfigPath: posix13.join(projectDir, ctx.config.tsconfig) });
   lap("program");
   const roleOf = createRepoRoleOf(ctx);
   const graph = buildImportGraph(project, {
@@ -250971,9 +251043,9 @@ function diskFiles(dir, repoRoot2) {
   const walk = (d) => {
     for (const entry of readdirSync3(d, { withFileTypes: true })) {
       if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
-      const full = posix12.join(d, entry.name);
+      const full = posix13.join(d, entry.name);
       if (entry.isDirectory()) walk(full);
-      else out.push(posix12.relative(repoRoot2, full));
+      else out.push(posix13.relative(repoRoot2, full));
     }
   };
   walk(dir);
@@ -250985,7 +251057,7 @@ function projectGlobs(ctx, context) {
 function loadBackendWorkspace(ctx, fs2, treeFiles, lap) {
   const projectDir = toPosix(ctx.projectDir);
   const repoRoot2 = toPosix(ctx.repoRoot);
-  const project = createProjectProgram({ fs: fs2, projectDir, tsconfigPath: posix12.join(projectDir, ctx.config.tsconfig) });
+  const project = createProjectProgram({ fs: fs2, projectDir, tsconfigPath: posix13.join(projectDir, ctx.config.tsconfig) });
   lap("program");
   const roleOf = createRepoRoleOf(ctx);
   const isOrigin = (path3) => {
@@ -250995,8 +251067,8 @@ function loadBackendWorkspace(ctx, fs2, treeFiles, lap) {
   const graph = buildImportGraph(project, { repoRoot: ctx.repoRoot, isOrigin: (path3) => isOrigin(path3) || roleOf(path3) === "outside" });
   lap("graph");
   const files = (treeFiles ?? diskFiles(projectDir, repoRoot2)).filter((f) => ctx.projectPrefix === "" || f.startsWith(`${ctx.projectPrefix}/`));
-  const backend = buildBackendTable({ project, repoRoot: repoRoot2, files, read: (f) => fs2.readFile(posix12.join(repoRoot2, f)), isOrigin, graphql: ctx.config.backend.graphql, rest: ctx.config.backend.rest, cli: ctx.config.backend.cli, context: projectGlobs(ctx, ctx.config.backend.context) });
-  const rel = (fileName) => posix12.relative(repoRoot2, toPosix(fileName));
+  const backend = buildBackendTable({ project, repoRoot: repoRoot2, files, read: (f) => fs2.readFile(posix13.join(repoRoot2, f)), isOrigin, graphql: ctx.config.backend.graphql, rest: ctx.config.backend.rest, cli: ctx.config.backend.cli, context: projectGlobs(ctx, ctx.config.backend.context) });
+  const rel = (fileName) => posix13.relative(repoRoot2, toPosix(fileName));
   const isProjectFile = (fileName) => toPosix(fileName).startsWith(`${repoRoot2}/`) && !toPosix(fileName).includes("/node_modules/");
   const extra = globalUses(project, backend.globals, rel, isProjectFile);
   if (extra.length > 0) {
@@ -251242,7 +251314,7 @@ function diffGoMod(manifest, baseText, headText) {
 // src/project/decls.ts
 var import_typescript21 = __toESM(require_typescript(), 1);
 import { createHash as createHash2 } from "crypto";
-import { posix as posix13 } from "path";
+import { posix as posix14 } from "path";
 function tokenHash(sf, node2) {
   const text = sf.text.slice(node2.getStart(sf), node2.end);
   const scanner = import_typescript21.default.createScanner(import_typescript21.default.ScriptTarget.Latest, true, sf.languageVariant, text);
@@ -251307,7 +251379,7 @@ function baseDecls(file2, code2) {
 }
 function tsDeclGraph(input2) {
   const root = input2.repoRoot.replaceAll("\\", "/");
-  const rel = (f) => posix13.relative(root, f.replaceAll("\\", "/"));
+  const rel = (f) => posix14.relative(root, f.replaceAll("\\", "/"));
   const isProject = (f) => f.replaceAll("\\", "/").startsWith(`${root}/`) && !f.includes("/node_modules/") && input2.isOrigin(rel(f));
   const checker = input2.project.program.getTypeChecker();
   const decls = [];
@@ -251431,7 +251503,7 @@ async function baseRouteTable(ctx, ws, mergeBaseSha, basePath) {
   const files = await listFiles(ctx.repoRoot, mergeBaseSha);
   const routeFiles = ws.routesFromDirectory ? filesUnder(files, basePath) : [];
   if (ws.routesFromDirectory ? routeFiles.length === 0 : !files.includes(basePath)) return { routes: [], dynamic: [], sources: [] };
-  const contents = await readFiles(ctx.repoRoot, mergeBaseSha, files.filter((f) => SOURCE_EXTENSIONS.has(posix14.extname(f)) || f === basePath));
+  const contents = await readFiles(ctx.repoRoot, mergeBaseSha, files.filter((f) => SOURCE_EXTENSIONS.has(posix15.extname(f)) || f === basePath));
   const code2 = ws.routesFromDirectory ? "" : contents.get(basePath);
   if (code2 === void 0) throw new Error(`internal: base content of ${basePath} was not read`);
   const fs2 = createTreeFileSystem({ repoRoot: ctx.repoRoot, files, contents, fallback: createDiskFileSystem() });
@@ -251446,7 +251518,7 @@ async function manifestDiffs(ctx, files, roleOf, baseSha, headSha) {
     try {
       const before = f.status === "added" ? null : base.get(f.oldPath ?? f.path) ?? null;
       const after = f.status === "deleted" ? null : head.get(f.path) ?? null;
-      const name = posix14.basename(f.path);
+      const name = posix15.basename(f.path);
       if (name === "pyproject.toml") return diffPyproject(f.path, before === null ? null : await parseToml(before), after === null ? null : await parseToml(after));
       if (name === "requirements.txt") return diffRequirementsTxt(f.path, before, after);
       return (name === "go.mod" ? diffGoMod : diffManifest)(f.path, before, after);
@@ -251534,7 +251606,7 @@ async function runAnalyze(ctx, options, deps) {
       Object.assign(timings, wsTimings);
       t = deps.clock();
       roleOf = createAnalysisRoleOf(ctx, ws.graph.nodes, ws.backend);
-      readHead = (path3) => ws.fs.readFile(posix14.join(toPosix(ctx.repoRoot), path3));
+      readHead = (path3) => ws.fs.readFile(posix15.join(toPosix(ctx.repoRoot), path3));
       const compared = comparedFiles(files, roleOf);
       const baseText = await readFiles(ctx.repoRoot, mb, compared);
       const headText = await readFiles(ctx.repoRoot, meta3.head.sha, compared);
@@ -251731,7 +251803,7 @@ function scoreGroups(items) {
 }
 
 // src/report/verdict.ts
-import { posix as posix15 } from "path";
+import { posix as posix16 } from "path";
 
 // src/report/review-parts.ts
 var FINDING_KINDS = /* @__PURE__ */ new Set(["security", "lint"]);
@@ -251793,7 +251865,7 @@ function computeVerdict(o) {
   for (const r of o.routes.affected) if (!r.hasChildren) for (const v of r.via) addEntry(v.file, r.path);
   for (const r of o.routes.added) if (r.entry !== null && !r.hasChildren) addEntry(r.entry, r.path);
   const count2 = (list2, path3) => list2.filter((x) => x.path === path3).length;
-  const isCode2 = (path3) => CODE2.has(posix15.extname(path3));
+  const isCode2 = (path3) => CODE2.has(posix16.extname(path3));
   const files = [];
   const other = [];
   const infra = [];
@@ -251843,7 +251915,7 @@ function computeVerdict(o) {
   const vulnerable = o.signals.vulnerabilities.related.filter((v) => v.severity === "critical" || v.severity === "high").length;
   if (vulnerable > 0) careful.push(`${vulnerable} serious vulnerabilit${vulnerable === 1 ? "y" : "ies"} in added or changed dependencies`);
   const untestedCentral = files.filter((f) => f.level === "high" && f.coverage?.ratio !== void 0 && f.coverage.ratio !== null && f.coverage.ratio < 0.5);
-  if (untestedCentral.length > 0) careful.push(`${untestedCentral.length} central file(s) with little or no diff coverage: ${untestedCentral.slice(0, 3).map((f) => posix15.basename(f.path)).join(", ")}`);
+  if (untestedCentral.length > 0) careful.push(`${untestedCentral.length} central file(s) with little or no diff coverage: ${untestedCentral.slice(0, 3).map((f) => posix16.basename(f.path)).join(", ")}`);
   const contracts = o.contracts?.entries ?? [];
   const breaking = contracts.filter((e) => e.level === "breaking");
   const dangerous = contracts.filter((e) => e.level === "dangerous");
@@ -252593,7 +252665,7 @@ function locationMd(l, path3, line3, label2 = path3) {
 }
 
 // src/report/markdown-review.ts
-import { posix as posix16 } from "path";
+import { posix as posix17 } from "path";
 
 // src/report/strings-workbench.ts
 function workbenchText(surface) {
@@ -252836,10 +252908,10 @@ function lede(o, parts, why, codeFiles) {
   const top = parts.filter((p) => p.points > 0).slice(0, 2).map((p) => {
     const first = p.items[0];
     if (p.kind === "contract") return fill(L.contract, { key: code(o.contracts?.entries.find((e) => e.level !== "safe")?.key ?? "") });
-    if (p.kind === "finding") return fill(first?.kind === "security" ? L.security : L.lint, { file: code(posix16.basename(p.file ?? "")) });
+    if (p.kind === "finding") return fill(first?.kind === "security" ? L.security : L.lint, { file: code(posix17.basename(p.file ?? "")) });
     if (p.kind === "unread") return fill(L.unknown, { what: esc3((first?.title ?? "").slice((first?.title ?? "").indexOf(": ") + 2), 160) });
     if (p.file === null) return esc3(first?.title ?? "", 160);
-    const file2 = code(posix16.basename(p.file));
+    const file2 = code(posix17.basename(p.file));
     if (p.items.some((i) => i.kind === "global")) return fill(L.global, { file: file2 });
     const dep = o.dependencies.changes.filter((c) => c.manifest === p.file && p.items.some((i) => i.kind === "dependency" && i.title.startsWith(`${c.name} `))).sort((a, b) => Number(b.critical) - Number(a.critical))[0];
     if (dep !== void 0) return dep.from !== null && dep.to !== null ? fill(dep.critical ? L.bumpMayBreak : L.bump, { name: code(dep.name), from: esc3(dep.from), to: esc3(dep.to) }) : fill(L.dependency, { name: code(dep.name), change: dep.change });
@@ -252871,7 +252943,7 @@ function mustLines(o, parts, l) {
       continue;
     }
     const path3 = p.file ?? "";
-    const where = locationMd(l, path3, p.line ?? 0, posix16.basename(path3));
+    const where = locationMd(l, path3, p.line ?? 0, posix17.basename(path3));
     if (item.kind === "security") {
       const s = o.signals.security.findings.find((f) => f.path === path3 && f.line === p.line);
       lines.push(`- [ ] \u{1F534} ${COMMENT_TEXT.security(where, s?.severity ?? "", code(s?.rule ?? ""), esc3(s?.message ?? item.title, 160))} \u2014 **${p.points}**`);
@@ -252924,7 +252996,7 @@ function reviewSection(o, l, reportUrl) {
 }
 
 // src/report/test-plan.ts
-import { posix as posix17 } from "path";
+import { posix as posix18 } from "path";
 function moduleOf(o, path3) {
   if (o.surface === "backend") {
     const parts = path3.split(" ");
@@ -252952,7 +253024,7 @@ function testPlan(o) {
   return [...groups.entries()].map(([label2, list2]) => ({ label: label2, items: list2.sort((a, b) => b.priority - a.priority || compareStrings(a.path, b.path)) })).sort((a, b) => Math.max(...b.items.map((i) => i.priority)) - Math.max(...a.items.map((i) => i.priority)) || compareStrings(a.label, b.label));
 }
 function shortFile(path3) {
-  return path3 === null ? "" : posix17.basename(path3);
+  return path3 === null ? "" : posix18.basename(path3);
 }
 
 // src/report/markdown.ts
@@ -254955,7 +255027,7 @@ async function usageCommand(ctx, options, env = process.env, now = /* @__PURE__ 
 }
 
 // src/cli/reviewers-run.ts
-import { posix as posix18, resolve as resolve9 } from "path";
+import { posix as posix19, resolve as resolve9 } from "path";
 
 // src/git/authors.ts
 function parseBlameAuthors(output2) {
@@ -255063,7 +255135,7 @@ async function runReviewers(ctx, options) {
   const files = await mapLimit(code2, BLAME_CONCURRENCY, async (f) => {
     const weight = Math.max(1, points.get(f.path) ?? 0);
     if (f.status === "added") {
-      const dir = posix18.dirname(f.path);
+      const dir = posix19.dirname(f.path);
       return { path: f.path, weight, whole: dir === "." ? /* @__PURE__ */ new Map() : await addedLinesByAuthor(ctx.repoRoot, base, dir, "12 months ago"), touched: null };
     }
     const basePath = f.oldPath ?? f.path;

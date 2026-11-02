@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { expoRouterAdapter } from '../../src/routes/expo-router/index.js'
 import { nextAdapter } from '../../src/routes/next/index.js'
 import { tanstackRouterAdapter } from '../../src/routes/tanstack-router/index.js'
 import type { RouteAdapter, RouteTable } from '../../src/routes/types.js'
@@ -90,5 +91,80 @@ describe('tanstack-router adapter', () => {
       ['routes', 1, expect.stringContaining('no TanStack Router route found')],
       ['routes/a.tsx', 3, 'createFileRoute without a literal route id'],
     ])
+  })
+})
+
+describe('expo-router adapter', () => {
+  it('lists screens with the layouts above them: index, groups, dynamic segments, platform modules', () => {
+    const t = extract(expoRouterAdapter, '', {
+      'src/app/_layout.tsx': '',
+      'src/app/_layout.web.tsx': '',
+      'src/app/index.tsx': '',
+      'src/app/sign-in.tsx': '',
+      'src/app/(tabs)/_layout.tsx': '',
+      'src/app/(tabs)/index.tsx': '',
+      'src/app/(tabs)/cards/[cardId].tsx': '',
+      'src/app/(tabs)/cards/[cardId].ios.tsx': '',
+      'src/app/(a,b)/docs/[...rest].tsx': '',
+      'src/app/(tabs)/cards/Card.test.tsx': '',
+      'src/app/styles.css': '',
+      'src/components/Card.tsx': '',
+    })
+    expect(rows(t)).toEqual([
+      ['/(a,b)/docs/[...rest]', '/docs/*', 'src/app/(a,b)/docs/[...rest].tsx', 'src/app/_layout.tsx,src/app/_layout.web.tsx'],
+      ['/(tabs)/cards/[cardId]', '/cards/:cardId', 'src/app/(tabs)/cards/[cardId].tsx', 'src/app/_layout.tsx,src/app/_layout.web.tsx,src/app/(tabs)/_layout.tsx'],
+      ['/(tabs)/index', '/', 'src/app/(tabs)/index.tsx', 'src/app/_layout.tsx,src/app/_layout.web.tsx,src/app/(tabs)/_layout.tsx'],
+      ['/index', '/', 'src/app/index.tsx', 'src/app/_layout.tsx,src/app/_layout.web.tsx'],
+      ['/sign-in', '/sign-in', 'src/app/sign-in.tsx', 'src/app/_layout.tsx,src/app/_layout.web.tsx'],
+    ])
+    expect(t.routes[1]?.modules).toEqual(['src/app/(tabs)/cards/[cardId].ios.tsx', 'src/app/(tabs)/cards/[cardId].tsx'])
+    expect(t.dynamic).toEqual([])
+  })
+
+  it('reads API routes, +not-found and the root modules that run before every screen', () => {
+    const t = extract(expoRouterAdapter, 'mobile', {
+      'mobile/app/_layout.tsx': '',
+      'mobile/app/+html.tsx': '',
+      'mobile/app/+native-intent.ts': '',
+      'mobile/app/+middleware.ts': '',
+      'mobile/app/+not-found.tsx': '',
+      'mobile/app/(protected)/+not-found.tsx': '',
+      'mobile/app/api/encrypt+api.ts': '',
+      'mobile/app/api/users/[id]+api.ts': '',
+      'mobile/app/api/encrypt.tsx': '',
+    })
+    const all = 'mobile/app/+middleware.ts,mobile/app/+native-intent.ts,mobile/app/+html.tsx,mobile/app/_layout.tsx'
+    expect(rows(t)).toEqual([
+      ['/(protected)/+not-found', '/*', 'mobile/app/(protected)/+not-found.tsx', all],
+      ['/+not-found', '/*', 'mobile/app/+not-found.tsx', all],
+      ['/api/encrypt', '/api/encrypt', 'mobile/app/api/encrypt.tsx', all],
+      ['/api/encrypt+api', '/api/encrypt', 'mobile/app/api/encrypt+api.ts', 'mobile/app/+middleware.ts'],
+      ['/api/users/[id]+api', '/api/users/:id', 'mobile/app/api/users/[id]+api.ts', 'mobile/app/+middleware.ts'],
+    ])
+    expect(t.dynamic).toEqual([])
+    expect(t.sources).toContain('mobile/app/+native-intent.ts')
+  })
+
+  it('takes a configured app directory, or one with a root _layout, as is', () => {
+    const t = extract(expoRouterAdapter, 'src/app', { 'src/app/index.tsx': '', 'src/app/app/settings.tsx': '' })
+    expect(t.routes.map((r) => r.path)).toEqual(['/app/settings', '/'])
+    const custom = extract(expoRouterAdapter, 'screens', { 'screens/_layout.tsx': '', 'screens/home.tsx': '', 'screens/app/x.tsx': '' })
+    expect(custom.routes.map((r) => r.key)).toEqual(['/app/x', '/home'])
+  })
+
+  it('reports what Expo Router refuses, and a project with no route (fail closed)', () => {
+    const t = extract(expoRouterAdapter, 'app', {
+      'app/index.tsx': '',
+      'app/index.ts': '',
+      'app/settings/+html.tsx': '',
+      'app/hello+api.web.ts': '',
+    })
+    expect(t.dynamic.map((d) => [d.file, d.detail])).toEqual([
+      ['app/hello+api.web.ts', 'Expo Router API routes cannot have platform extensions'],
+      ['app/index.tsx', 'route /index is defined twice: app/index.ts and app/index.tsx'],
+      ['app/settings/+html.tsx', '+html is not an Expo Router route name'],
+    ])
+    expect(extract(expoRouterAdapter, '', { 'src/a.ts': '' }).dynamic.map((d) => d.detail)).toEqual(['no Expo Router routes directory found: expected app/ or src/app/ in the project, or set routes.dir to it'])
+    expect(extract(expoRouterAdapter, 'app', { 'app/README.md': '' }).dynamic.map((d) => d.detail)).toEqual(['no Expo Router route found: expected route modules under app'])
   })
 })

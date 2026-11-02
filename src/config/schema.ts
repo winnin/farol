@@ -110,10 +110,10 @@ export const ConfigSchema = z
       .prefault({}),
     routes: z
       .object({
-        /** react-router: a route table in `file`. next, tanstack-router: file-system routing under `dir`. */
-        adapter: z.enum(['react-router', 'next', 'tanstack-router']).default('react-router'),
+        /** react-router: a route table in `file`. next, tanstack-router, expo-router: file-system routing under `dir`. */
+        adapter: z.enum(['react-router', 'next', 'tanstack-router', 'expo-router']).default('react-router'),
         file: z.string().min(1, 'routes.file must point to the file with the route table, e.g. "src/routes.tsx"').optional(),
-        /** File-system routers: next → the directory holding pages/ and app/ (default: the project, or its src/); tanstack-router → the routes directory (default "src/routes"). */
+        /** File-system routers: next → the directory holding pages/ and app/ (default: the project, or its src/); tanstack-router → the routes directory (default "src/routes"); expo-router → the routes directory, or a directory holding app/ or src/app/ (default: the project). */
         dir: z.string().optional(),
         /** Other modules that only define routes (split route trees): they get the routes rule instead of the source rule. */
         extraFiles: globs.default([]),
@@ -164,7 +164,7 @@ export const ConfigSchema = z
   .strict()
   .superRefine((config, ctx) => {
     if (config.language !== 'typescript' && config.surface !== 'backend') ctx.addIssue({ code: 'custom', path: ['surface'], message: `a ${config.language === 'go' ? 'Go' : 'Python'} project is a backend: set "surface": "backend"` })
-    if (config.surface === 'frontend' && config.routes === undefined) ctx.addIssue({ code: 'custom', path: ['routes'], message: 'routes is required for a frontend (routes.file for React Router, or routes.adapter "next" / "tanstack-router"), or set "surface": "backend"' })
+    if (config.surface === 'frontend' && config.routes === undefined) ctx.addIssue({ code: 'custom', path: ['routes'], message: 'routes is required for a frontend (routes.file for React Router, or routes.adapter "next" / "tanstack-router" / "expo-router"), or set "surface": "backend"' })
   })
   // A backend has no routes file: an empty one keeps the rest of the code uniform.
   .transform((config) => ({

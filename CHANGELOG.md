@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Expo Router.** `routes.adapter` `expo-router` reads file-based routing of Expo and React Native apps from `app/` or `src/app/`: screens, `_layout` layouts, groups (including `(a,b)`), dynamic segments, API routes (`+api`), `+not-found`, the root `+native-intent`, `+html` and `+middleware`, and platform modules (`about.ios.tsx`) as part of their route.
+
 ## 0.2.1 — 2026-10-26
 
 - **PR comment follows the report.** Merge risk and verdict in the title, one sentence on where the risk comes from, *Must check* as a task list, the High and Medium files with their share of the score, and how much new code is tested; the other signals move to a collapsed *All signals* block. Points match the report: a file's findings are parts of their own (a file no longer shows "risk 34" with its security finding inside).

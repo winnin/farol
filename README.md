@@ -106,7 +106,7 @@ what farol shows.
 - [Live demo](#live-demo)
 - [farol after your AI review](#farol-after-your-ai-review)
 - [Get started](#get-started)
-- [Recipes](#recipes): [React Router](#react-frontend-react-router) · [Next.js](#nextjs) · [TanStack Router](#tanstack-router) · [TypeScript API](#typescript-api-graphql-or-rest) · [Go](#go-service) · [Python](#python-service) · [Datadog](#add-datadog-traffic-and-errors)
+- [Recipes](#recipes): [React Router](#react-frontend-react-router) · [Next.js](#nextjs) · [TanStack Router](#tanstack-router) · [Expo Router](#expo-router) · [TypeScript API](#typescript-api-graphql-or-rest) · [Go](#go-service) · [Python](#python-service) · [Datadog](#add-datadog-traffic-and-errors)
 - [What is supported](#what-is-supported)
 - [Reading the review](#reading-the-review)
 - [How it works](#how-it-works) · [Security](#security-and-privacy) · [Limitations](#limitations) · [FAQ](#faq)
@@ -124,6 +124,7 @@ install: run farol with `npx @winninjs/farol`.
 | React app with React Router | `{ "routes": { "file": "src/routes.tsx" } }` (the file that builds the route table) | [React Router](#react-frontend-react-router) |
 | Next.js app (Pages or App Router) | `{ "routes": { "adapter": "next" } }` | [Next.js](#nextjs) |
 | React app with TanStack Router | `{ "routes": { "adapter": "tanstack-router", "dir": "src/routes" } }` | [TanStack Router](#tanstack-router) |
+| Expo / React Native app with Expo Router | `{ "routes": { "adapter": "expo-router" } }` | [Expo Router](#expo-router) |
 | TypeScript API (GraphQL, REST) | `{ "surface": "backend" }` | [TypeScript API](#typescript-api-graphql-or-rest) |
 | Go service | `{ "language": "go", "surface": "backend" }` | [Go](#go-service) |
 | Python service (FastAPI, Flask, Django, Celery…) | `{ "language": "python", "surface": "backend" }` | [Python](#python-service) |
@@ -227,6 +228,23 @@ pathless layouts (`_app`) and parent routes as layouts of their children.
 
 Reports and CI are the same as for [React Router](#react-frontend-react-router).
 
+### Expo Router
+
+File-based routing for Expo and React Native apps: every screen under `app/` (or `src/app/`), with the `_layout` of
+every folder above it as its layouts, API routes (`+api`), `+not-found`, and the root `+native-intent`, `+html` and
+`+middleware` that run before every screen. Groups (`(tabs)`, `(a,b)`), dynamic segments (`[id]`, `[...rest]`) and
+platform modules (`about.ios.tsx` is part of `about.tsx`) are understood.
+
+```json
+{
+  "routes": { "adapter": "expo-router" },
+  "roles": { "global": ["app.json", "app.config.*", "package.json"] }
+}
+```
+
+`app/` and `src/app/` are found in the project; set `"dir"` to the routes directory when it lives elsewhere. Reports and
+CI are the same as for [React Router](#react-frontend-react-router).
+
 ### TypeScript API (GraphQL or REST)
 
 GraphQL root operations (schema files and `gql` templates, per resolver) and Fastify/Express-style REST endpoints.
@@ -313,7 +331,7 @@ matching rules are in the [reference](docs/reference.md#traffic-and-errors-from-
 
 | | TypeScript / React frontends | TypeScript / JavaScript backends | Go | Python |
 |---|---|---|---|---|
-| **Entry points** | React Router route tables (object and JSX forms, lazy routes, split route modules); Next.js Pages and App Router (pages, API routes, layouts, middleware); TanStack Router file-based routes | GraphQL root operations (schema files and `gql` templates), REST endpoints (Fastify/Express style) and command-line commands (commander, cac, yargs) | chi, gin, echo and net/http routes; gRPC service methods; `main` binaries | FastAPI and Flask routes (routers, blueprints, prefixes); Django URLs; MCP tools, resources and prompts; Celery tasks; Temporal workflows and activities; Prefect flows; `__main__` scripts |
+| **Entry points** | React Router route tables (object and JSX forms, lazy routes, split route modules); Next.js Pages and App Router (pages, API routes, layouts, middleware); TanStack Router file-based routes; Expo Router (screens, layouts, API routes) | GraphQL root operations (schema files and `gql` templates), REST endpoints (Fastify/Express style) and command-line commands (commander, cac, yargs) | chi, gin, echo and net/http routes; gRPC service methods; `main` binaries | FastAPI and Flask routes (routers, blueprints, prefixes); Django URLs; MCP tools, resources and prompts; Celery tasks; Temporal workflows and activities; Prefect flows; `__main__` scripts |
 | **Reach precision** | per declaration (TypeScript type checker) | per module, per resolver for GraphQL | per declaration (`go/types`, interface calls resolved to implementations) | per declaration (Python `ast` with local type inference) |
 | **Contract changes** | — | GraphQL schema (breaking / dangerous / safe) | Handler request and response types (net/http, chi, gin, echo); gRPC messages | FastAPI parameters, body, response and Pydantic models |
 | **Dependencies** | `package.json` + npm/pnpm/yarn/bun lockfiles | same | `go.mod` + `go.sum` | `pyproject.toml` (PEP 621, extras, groups, uv, Poetry), `requirements.txt` + `uv.lock`/`poetry.lock`/`Pipfile.lock` |
@@ -455,7 +473,7 @@ The details per language are in [docs/how-it-works.md](docs/how-it-works.md), an
 ## Limitations
 
 - Static reading: values built at runtime are invisible (computed route paths, `getattr`, `importlib`, DI containers, registries filled in loops). When an entry point cannot be read, the PR is `unknown`; when a call cannot be resolved, farol assumes it reaches more, never less.
-- TypeScript frontends: React Router, Next.js and TanStack Router (file-based) only: no code-based TanStack route trees, Remix/React Router file conventions, Vue or Svelte. JavaScript files, renamed files and TypeScript backends use module-level reach.
+- TypeScript frontends: React Router, Next.js, TanStack Router (file-based) and Expo Router only: no code-based TanStack route trees, Remix/React Router file conventions, Vue or Svelte. JavaScript files, renamed files and TypeScript backends use module-level reach.
 - Go: route prefixes from middleware stacks other than chi/gin/echo groups are not applied, and project types that wrap a router with their own registration API (Gitea's `web.Router`) are not read. Python: Django REST Framework routers are not read.
 - The score and verdict thresholds are heuristics checked on a few repositories. Calibrate them on yours.
 
