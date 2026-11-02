@@ -1,6 +1,7 @@
 import { compareStrings, sortedUnique } from '../output/order.js'
 import { keyPath, overlaps } from './hono-paths.js'
-import type { MountEntry, ResolverChanges } from './resolvers.js'
+import { codeText, parseIsolated } from '../project/parse.js'
+import { appCodeChanged, diffResolvers, resolverEntries, type MountEntry, type ResolverChanges } from './resolvers.js'
 import { restAnchor } from './rest.js'
 import type { SchemaDiff } from './schema.js'
 
@@ -46,11 +47,52 @@ function operationsUsingResolver(key: string, table: ImpactTable): string[] {
   return [...table.resolverKeys.entries()].filter(([, keys]) => keys.has(key)).map(([op]) => op).sort(compareStrings)
 }
 
+/** The endpoint comparison of a changed file, with the endpoints a wide change reaches. */
+export type CodeFileChanges = ResolverChanges & { keys: string[]; reachKeys: readonly string[] }
+
+export interface CodeFile {
+  file: string
+  before: string
+  after: string
+  /** A source file holds an app and has no other comparison: any edit beyond comments and formatting counts. */
+  isSource: boolean
+  holdsApp: boolean
+  rest: boolean
+}
+
+export interface CodeTable {
+  typeFields: ReadonlyMap<string, ReadonlySet<string>>
+  honoFiles: ReadonlySet<string>
+  fileReachKeys: (file: string) => readonly string[]
+}
+
+const sameCode = (file: string, a: string, b: string): boolean => {
+  const code = (text: string): string => {
+    const { sourceFile } = parseIsolated(file, text)
+    return codeText(sourceFile, sourceFile)
+  }
+  return code(a) === code(b)
+}
+
+/**
+ * Compares both versions of a code file. Item by item, moving `app.use(mw)` or a new property of its options is
+ * additive; for a file with an app it is not, and every endpoint under its apps is reached.
+ */
+export function compareCodeFile(table: CodeTable, f: CodeFile): CodeFileChanges {
+  const usesHono = table.honoFiles.has(f.file)
+  const base = resolverEntries(f.file, f.before, table.typeFields, f.rest, usesHono || f.holdsApp)
+  const head = resolverEntries(f.file, f.after, table.typeFields, f.rest, usesHono || f.holdsApp)
+  const diff = diffResolvers(base, head)
+  const edited = (f.isSource && !sameCode(f.file, f.before, f.after)) || (f.holdsApp && appCodeChanged(base, head))
+  const reaches = f.holdsApp || (usesHono && base.middleware.size + head.middleware.size > 0)
+  return { ...diff, restChanged: diff.restChanged || edited, wide: diff.wide || edited, keys: [...new Set([...base.entries, ...head.entries].map((e) => e.key))], reachKeys: reaches ? table.fileReachKeys(f.file) : [] }
+}
+
 /**
  * Impact of one changed file from its SDL diff and its resolver/endpoint diff (either may be absent). Endpoint keys of
  * the diff are paths as written in `file`; they run the endpoints of their handler anchor (one per Hono mount).
  */
-export function backendFileImpact(table: ImpactTable, file: string, schema: SchemaDiff | undefined, resolvers: (ResolverChanges & { keys: string[]; reachKeys: readonly string[] }) | undefined): BackendFileImpact {
+export function backendFileImpact(table: ImpactTable, file: string, schema: SchemaDiff | undefined, resolvers: CodeFileChanges | undefined): BackendFileImpact {
   const using = (k: string): string[] => operationsUsingResolver(k.includes(' ') ? restAnchor(file, k) : k, table)
   /** The full endpoint keys of a handler when its mounts change them, else the key as written. */
   const label = (k: string): string => {

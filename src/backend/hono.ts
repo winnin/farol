@@ -1,10 +1,10 @@
 import ts from 'typescript'
 import { sortedUnique } from '../output/order.js'
-import { unwrap } from '../project/parse.js'
+import { codeText, parseIsolated, unwrap } from '../project/parse.js'
 import type { DynamicRoute } from '../routes/types.js'
 import { mergePath } from './hono-paths.js'
 import { type AppCall, installsOnApp, registrationReader } from './hono-registrations.js'
-import { type App, appResolver, importsHono } from './hono-resolver.js'
+import { type App, appResolver, type AppResolver, importsHono } from './hono-resolver.js'
 import { literal, METHODS, plainChain, plainTarget } from './rest.js'
 
 /** `to` is mounted in `from` (`mount`: its prefix and `MountNode` id), or `to` is a parameter that receives `from`. */
@@ -45,25 +45,28 @@ export interface HonoApps {
 
 export const UNRESOLVED_APP = 'Hono app is not one farol can follow (basePath, alias or property)'
 
-/** Whether a file version holds a Hono app: `new Hono()`, a parameter typed `Hono`, or a `use`, `onError` or `on` call (syntax only). */
-export function holdsApp(sf: ts.SourceFile, usesHono: boolean): boolean {
-  if (!usesHono && !importsHono(sf)) return false
+const isRouteCall = (n: ts.Node): n is AppCall => ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === 'route'
+
+/** Whether a file version holds a Hono app: `new Hono()`, a parameter typed `Hono`, a mount, or a `use`, `onError` or `on` call (syntax only). */
+export function holdsApp(file: string, code: string, usesHono: boolean): boolean {
+  const { sourceFile: sf } = parseIsolated(file, code)
   const names = new Set<string>()
   for (const s of sf.statements) {
     const named = ts.isImportDeclaration(s) ? s.importClause?.namedBindings : undefined
     if (named && ts.isNamedImports(named)) for (const el of named.elements) if ((el.propertyName ?? el.name).text === 'Hono') names.add(el.name.text)
   }
+  const hono = usesHono || importsHono(sf)
   const isHono = (e: ts.Node | undefined): boolean => e !== undefined && ts.isIdentifier(e) && names.has(e.text)
   const found = (node: ts.Node): boolean => {
-    if (ts.isNewExpression(node) && isHono(node.expression)) return true
-    if (ts.isParameter(node) && node.type && ts.isTypeReferenceNode(node.type) && isHono(node.type.typeName)) return true
-    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && installsOnApp(node as AppCall)) return true
+    // A two-argument route() is a mount also with no hono import: the mount was how the table knew the file uses Hono.
+    if (isRouteCall(node) && node.arguments.length === 2) return true
+    if (hono && ts.isNewExpression(node) && isHono(node.expression)) return true
+    if (hono && ts.isParameter(node) && node.type && ts.isTypeReferenceNode(node.type) && isHono(node.type.typeName)) return true
+    if (hono && ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && installsOnApp(node as AppCall)) return true
     return ts.forEachChild(node, (child) => (found(child) ? true : undefined)) ?? false
   }
   return found(sf)
 }
-
-const isRouteCall = (n: ts.Node): n is AppCall => ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === 'route'
 
 /** A Hono mount (`app.route('/prefix', sub)`, two arguments, none spread). */
 export interface MountNode {
@@ -86,7 +89,7 @@ export function mountNodes(sf: ts.SourceFile, file: string): MountNode[] {
   const visit = (node: ts.Node): void => {
     const [prefixArg, target] = isRouteCall(node) ? node.arguments : []
     if (isRouteCall(node) && node.arguments.length === 2 && prefixArg && target && !ts.isSpreadElement(prefixArg) && !ts.isSpreadElement(target)) {
-      const text = `${file} ${node.getText(sf).replace(/\s+/g, ' ').trim()}`
+      const text = `${file} ${codeText(node, sf)}`
       const n = (seen.get(text) ?? 0) + 1
       seen.set(text, n)
       const plain = plainChain(node.expression.expression) && plainTarget(target)
@@ -99,10 +102,10 @@ export function mountNodes(sf: ts.SourceFile, file: string): MountNode[] {
 }
 
 /**
- * The mount edges (`app.route(prefix, sub)`) and argument edges (an app passed to a `Hono` parameter) of the program.
- * What farol cannot follow in a file that uses Hono, or in a mount whose target is a Hono app, is a dynamic route.
+ * What the program's calls say about its apps: mount edges (`app.route(prefix, sub)`), argument edges (an app passed to a
+ * `Hono` parameter), registrations and the apps of each file. What farol cannot follow in a file that uses Hono, or in a mount whose target is a Hono app, is a dynamic route.
  */
-function collectEdges(files: readonly ts.SourceFile[], honoFiles: ReadonlySet<ts.SourceFile>, r: ReturnType<typeof appResolver>, rel: (fileName: string) => string) {
+function readApps(files: readonly ts.SourceFile[], honoFiles: ReadonlySet<ts.SourceFile>, r: AppResolver, rel: (fileName: string) => string) {
   const incoming = new Map<App, Edge[]>()
   const mountFiles = new Set<string>()
   const middleware = new Set<App>()
@@ -166,8 +169,9 @@ function collectEdges(files: readonly ts.SourceFile[], honoFiles: ReadonlySet<ts
     const name = call.expression.name.text
     const registration = registrationOf(call)
     const guards = METHODS.has(name) ? call.arguments.slice(1, -1) : []
-    if (!registration && guards.length === 0) return
     const app = r.appOf(call.expression.expression)
+    if (app && METHODS.has(name) && call.arguments.length >= 2) recordApp(call, app)
+    if (!registration && guards.length === 0) return
     if (!app) {
       // A handler on an app farol cannot follow is already a dynamic route (`buildBackendTable`).
       if (registration && !METHODS.has(name) && honoFiles.has(call.getSourceFile())) at(call, `Hono ${name}() is on an app farol cannot follow: its middleware cannot be placed`)
@@ -205,7 +209,7 @@ function collectEdges(files: readonly ts.SourceFile[], honoFiles: ReadonlySet<ts
 export function honoApps(files: readonly ts.SourceFile[], checker: ts.TypeChecker, rel: (fileName: string) => string): HonoApps {
   const r = appResolver(checker)
   const honoFiles = new Set(files.filter(r.usesHono))
-  const { incoming, mountFiles, middleware, registered, fileApps, dynamic } = collectEdges(files, honoFiles, r, rel)
+  const { incoming, mountFiles, middleware, registered, fileApps, dynamic } = readApps(files, honoFiles, r, rel)
   const edges = [...incoming.values()].flat()
   const outgoing = new Map<App, Edge[]>()
   for (const e of edges) outgoing.set(e.from, [...(outgoing.get(e.from) ?? []), e])

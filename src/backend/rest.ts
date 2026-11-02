@@ -19,11 +19,17 @@ function isHandler(node: ts.Node | undefined, call: ts.CallExpression): node is 
   return (ts.isIdentifier(node) || ts.isPropertyAccessExpression(node)) && SERVERS.has(receiverName(call) ?? '')
 }
 
+/** A function with a second parameter, also through a rest parameter: Hono passes `next` there. */
+export const hasNextParameter = (fn: ts.SignatureDeclaration): boolean => fn.parameters.length >= 2 || fn.parameters.some((p) => p.dotDotDotToken !== undefined)
+
 /** An inline function that takes `next`. */
 export function takesNext(a: ts.Expression): boolean {
   const x = unwrap(a)
-  return (ts.isArrowFunction(x) || ts.isFunctionExpression(x)) && x.parameters.length >= 2
+  return (ts.isArrowFunction(x) || ts.isFunctionExpression(x)) && hasNextParameter(x)
 }
+
+/** A path that serves many requests (`*`, or a `{…}` pattern): a named handler there is treated as middleware. */
+export const isWidePath = (path: string): boolean => path.includes('*') || path.includes('{')
 
 export function literal(node: ts.Node | undefined): string | undefined {
   return node && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) ? node.text : undefined
@@ -40,7 +46,7 @@ function objectProp(obj: ts.ObjectLiteralExpression, name: string): ts.Expressio
 /** A REST handler registration; `receiver` is the expression the method is called on (`routes` in `routes.get(…)`). */
 export interface RestNode {
   key: string
-  node: ts.Node
+  node: ts.CallExpression
   value: ts.Node
   receiver: ts.Expression
   /** Middleware arguments before the handler: they run for this route only. */

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { buildBackendTable } from '../../src/backend/entrypoints.js'
 import { mountNodes, UNRESOLVED_APP } from '../../src/backend/hono.js'
 import { mergePath, overlaps } from '../../src/backend/hono-paths.js'
-import { diffResolvers, resolverEntries, stripComments } from '../../src/backend/resolvers.js'
+import { diffResolvers, resolverEntries } from '../../src/backend/resolvers.js'
 import { parseIsolated } from '../../src/project/parse.js'
 import { memoryProject, ROOT } from '../helpers/memory.js'
 
@@ -99,21 +99,6 @@ describe('Hono middleware placement', () => {
       'src/logger.ts': 'export const logger = () => undefined\n',
     })
     expect(t.operations.map((o) => [o.key, o.modules])).toEqual([['GET /b', []], ['POST /a', ['src/guard.ts']]])
-  })
-})
-
-describe('comments', () => {
-  it.each([
-    ['a line comment', 'const a = 1 // note\n', 'const a = 1 \n'],
-    ['a block comment', 'f(/* note */ a)', 'f( a)'],
-    ['a doc comment', '/** note */\nconst a = 1', '\nconst a = 1'],
-    ['// in a template tail stays', 'const a = `${b}//c`', 'const a = `${b}//c`'],
-    ['/* in a template tail stays', 'const a = `${b}/*c*/`', 'const a = `${b}/*c*/`'],
-    ['// in a regular expression stays', 'const a = /b\\/\\/c/', 'const a = /b\\/\\/c/'],
-    ['// in a string stays', "const a = '//b'", "const a = '//b'"],
-    ['code the parser skips stays', ') ) // note\n', ') ) \n'],
-  ])('%s', (_name, code, expected) => {
-    expect(stripComments(code)).toBe(expected)
   })
 })
 
@@ -257,6 +242,12 @@ export function register(app: H<{ Bindings: {} }>) {
     const diff = (head: string) => diffResolvers(resolverEntries('src/ping.ts', base, new Map()), resolverEntries('src/ping.ts', head, new Map()))
     expect(diff(`${base}ping.use('*', async (c) => c.text('no', 401))\n`).problems).toEqual([expect.stringContaining('runs when the file loads')])
     expect(diff(`${base}ping.get('/pong', (c) => c.text('ping'))\n`).problems).toEqual([])
+  })
+
+  it('a new enum resolver is not reported as empty load code', () => {
+    const types = new Map([['Status', new Set(['__values'])]])
+    const diff = diffResolvers(resolverEntries('src/a.ts', 'export const r = { other: 1 }', types), resolverEntries('src/a.ts', 'export const r = { other: 1, Status: build() }', types))
+    expect(diff.problems).toEqual([])
   })
 
   it('reads route(a, b) calls as mounts only in files that import hono', () => {

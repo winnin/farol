@@ -244,7 +244,7 @@ export function classify(input: ClassifyInput): ClassifyResult {
     // Modified existing file: only routes, barrel and i18n files can be additive.
     const declImpact = role === 'source' ? impactOf(file.path) : undefined
     if (declImpact) {
-      // Declaration-level impact (Go): only changed or removed declarations count, with the entry points they reach.
+      // Declaration-level impact (Go, Python, TypeScript files that hold a Hono app): only changed or removed declarations count, with the entry points they reach.
       out.additive = declImpact.additive
       if (declImpact.additive) {
         const list = (items: readonly string[]): string => `${items.slice(0, 8).join(', ')}${items.length > 8 ? ', …' : ''}`

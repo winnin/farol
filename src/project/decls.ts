@@ -5,18 +5,14 @@ import type { DeclHelperOutput } from '../decls/types.js'
 import { routeAnchors } from '../classify/reach.js'
 import type { RouteTable } from '../routes/types.js'
 import { isProjectPath } from './fs.js'
-import { parseIsolated } from './parse.js'
+import { codeTokens, parseIsolated } from './parse.js'
 import type { ProjectProgram } from './program.js'
 
 type Decl = DeclHelperOutput['decls'][number]
 
-/** Hash of a node's tokens without comments or whitespace: equal hashes mean the same code. */
+/** Hash of a node's tokens: equal hashes mean the same code. */
 function tokenHash(sf: ts.SourceFile, node: ts.Node): string {
-  const text = sf.text.slice(node.getStart(sf), node.end)
-  const scanner = ts.createScanner(ts.ScriptTarget.Latest, true, sf.languageVariant, text)
-  const hash = createHash('sha1')
-  for (let kind = scanner.scan(); kind !== ts.SyntaxKind.EndOfFileToken; kind = scanner.scan()) hash.update(`${kind}:${scanner.getTokenText()}\0`)
-  return hash.digest('hex').slice(0, 16)
+  return createHash('sha1').update(codeTokens(node, sf).join('\0')).digest('hex').slice(0, 16)
 }
 
 const isTypeDecl = (s: ts.Node): boolean => ts.isInterfaceDeclaration(s) || ts.isTypeAliasDeclaration(s)

@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from 'vitest'
 import type { Output } from '../../src/output/schema.js'
-import { analyzeRepo } from '../helpers/analyze.js'
-import { createScenarioRepo, type TestRepo } from '../helpers/repo.js'
+import type { TestRepo } from '../helpers/repo.js'
+import { analyzeVariant, edit, type Change } from '../helpers/variant.js'
 
 const cleanups: (() => void)[] = []
 afterAll(() => {
@@ -23,26 +23,7 @@ const HELPER_KEYS = ['GET /admin/*', 'GET /admin/api/prompts', 'GET /admin/api/p
 // The Fastify endpoints of the base API (`GET /health`, `POST /webhooks/stripe`) are never under a Hono app.
 const ALL_HONO = ['ALL /secure/*', 'GET /admin/*', 'GET /admin/api/prompts', 'GET /admin/api/prompts/:key', 'GET /admin/api/whoami', 'GET /files', 'GET /files/:name', 'GET /healthz', 'GET /public/items', 'GET /secure/report', 'POST /admin/api/prompts']
 
-type Change = (repo: TestRepo) => void
-
-function edit(repo: TestRepo, file: string, from: string, to: string): void {
-  const code = repo.read(file)
-  if (!code.includes(from)) throw new Error(`${file} does not contain: ${from}`)
-  repo.write(file, code.replace(from, to))
-}
-
-/** A PR that applies `change` on the base; `setup` first changes the base itself. */
-async function analyze(change: Change, setup?: Change): Promise<Output> {
-  const { repo } = createScenarioRepo('b12-hono-middleware')
-  cleanups.push(() => { repo.cleanup(); })
-  repo.git('checkout', '-q', 'main')
-  setup?.(repo)
-  repo.commit('setup')
-  repo.git('checkout', '-q', '-B', 'feature')
-  change(repo)
-  repo.commit('variant')
-  return (await analyzeRepo(repo)).output
-}
+const analyze = (change: Change, setup?: Change): Promise<Output> => analyzeVariant('b12-hono-middleware', cleanups, change, setup)
 
 const affected = (o: Output): string[] => o.routes.affected.map((r) => r.key)
 

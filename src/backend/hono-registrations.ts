@@ -1,7 +1,7 @@
 import ts from 'typescript'
 import { unwrap } from '../project/parse.js'
 import type { AppResolver } from './hono-resolver.js'
-import { literal, METHODS, takesNext } from './rest.js'
+import { hasNextParameter, isWidePath, literal, METHODS, takesNext } from './rest.js'
 
 export type AppCall = ts.CallExpression & { expression: ts.PropertyAccessExpression }
 
@@ -16,9 +16,11 @@ export function registrationReader(r: AppResolver) {
   // A named handler on `all` or a `*` path is middleware when its function takes `next`, or when farol cannot find it.
   const namedNext = (call: AppCall): boolean => {
     const last = call.arguments[call.arguments.length - 1]
-    const wide = call.expression.name.text === 'all' || (literal(call.arguments[0]) ?? '*').includes('*')
-    const fn = last && !takesNext(last) ? r.functionOf(last) : undefined
-    return last !== undefined && wide && !ts.isArrowFunction(unwrap(last)) && !ts.isFunctionExpression(unwrap(last)) && (fn ? fn.parameters.length >= 2 : true)
+    if (!last || (call.expression.name.text !== 'all' && !isWidePath(literal(call.arguments[0]) ?? '*'))) return false
+    const x = unwrap(last)
+    if (ts.isArrowFunction(x) || ts.isFunctionExpression(x)) return false
+    const fn = r.functionOf(last)
+    return fn ? hasNextParameter(fn) : true
   }
   /** Path and code of a call that installs code on its app; a path farol cannot read covers the whole app. */
   const registrationOf = (call: AppCall): { path: string; args: ts.Expression[] } | undefined => {

@@ -1,8 +1,8 @@
 import { Kind, type DocumentNode } from 'graphql'
-import { backendFileImpact, mountImpacts, type AddedMount, type BackendFileImpact } from '../backend/impact.js'
+import { backendFileImpact, compareCodeFile, mountImpacts, type AddedMount, type BackendFileImpact, type CodeFileChanges } from '../backend/impact.js'
 import type { BackendTable } from '../backend/entrypoints.js'
 import { holdsApp } from '../backend/hono.js'
-import { appCodeChanged, diffResolvers, resolverEntries, stripComments } from '../backend/resolvers.js'
+import { resolverEntries } from '../backend/resolvers.js'
 import { restAnchor } from '../backend/rest.js'
 import { diffSdl, parseSdl, sdlSources } from '../backend/schema.js'
 import { isScriptFile } from '../classify/declarations-only.js'
@@ -10,7 +10,6 @@ import type { AnalysisRole } from '../classify/roles.js'
 import { readFiles } from '../git/index.js'
 import type { ChangedFile } from '../git/types.js'
 import type { RouteTable } from '../routes/types.js'
-import { parseIsolated } from '../project/parse.js'
 import type { Context } from './context.js'
 import { graphqlContractChanges, type EntryContractChange } from '../contracts/graphql.js'
 
@@ -40,7 +39,7 @@ export async function backendImpacts(
   const base = await readFiles(ctx.repoRoot, baseSha, paths)
   const head = await readFiles(ctx.repoRoot, headSha, paths)
   // A file that holds a Hono app in either version: its module code runs for that app's endpoints, also with no handler.
-  const holdsInVersion = (path: string, code: string | undefined): boolean => code !== undefined && holdsApp(parseIsolated(path, code).sourceFile, table.honoFiles.has(path))
+  const holdsInVersion = (path: string, code: string | undefined): boolean => code !== undefined && holdsApp(path, code, table.honoFiles.has(path))
   const appFiles = new Set(paths.filter((p) => ctx.config.backend.rest && isScriptFile(p) && (table.fileHoldsApp(p) || holdsInVersion(p, base.get(p)) || holdsInVersion(p, head.get(p)))))
   const targets = candidates.filter((f) => compared(f) || appFiles.has(f.path))
   const impacts = new Map<string, BackendFileImpact>()
@@ -53,21 +52,10 @@ export async function backendImpacts(
     const after = head.get(f.path)
     const isCode = !f.path.endsWith('.graphql') && !f.path.endsWith('.gql')
     const schema = diffSdl(fileSchema(f.path, before), fileSchema(f.path, after))
-    let resolvers: Parameters<typeof backendFileImpact>[3]
-    if (isCode && before !== undefined && after !== undefined) {
-      const hono = table.honoFiles.has(f.path) || appFiles.has(f.path)
-      const b = resolverEntries(f.path, before, table.typeFields, ctx.config.backend.rest, hono)
-      const h = resolverEntries(f.path, after, table.typeFields, ctx.config.backend.rest, hono)
-      // A resolver file or a file with an app is always compared: with no entries left, its module code is what changed.
-      if (roleOf(f.path) === 'resolvers' || appFiles.has(f.path) || b.entries.length + h.entries.length + b.mounts.size + h.mounts.size > 0) {
-        const diff = diffResolvers(b, h)
-        // Item by item, moving `app.use(mw)` or a new property of its options is additive; for a file with an app it is not.
-        const sourceEdit = roleOf(f.path) === 'source' && stripComments(before, f.path).replace(/\s+/g, ' ') !== stripComments(after, f.path).replace(/\s+/g, ' ')
-        const moved = sourceEdit || (appFiles.has(f.path) && appCodeChanged(b, h))
-        const reaches = appFiles.has(f.path) || (table.honoFiles.has(f.path) && b.middleware.size + h.middleware.size > 0)
-        resolvers = { ...diff, restChanged: diff.restChanged || moved, wide: diff.wide || moved, keys: [...new Set([...b.entries, ...h.entries].map((e) => e.key))], reachKeys: reaches ? table.fileReachKeys(f.path) : [] }
-      }
-    }
+    // Every code file is compared: with no entries left, or with SDL only, its module code is what changed.
+    const resolvers: CodeFileChanges | undefined = isCode && before !== undefined && after !== undefined
+      ? compareCodeFile(table, { file: f.path, before, after, isSource: roleOf(f.path) === 'source', holdsApp: appFiles.has(f.path), rest: ctx.config.backend.rest })
+      : undefined
     for (const k of resolvers?.added ?? []) if (k.includes(' ')) addedAnchors.add(restAnchor(f.path, k))
     for (const m of resolvers?.addedMounts ?? []) addedMounts.push({ ...m, file: f.path })
     const impact = backendFileImpact(table, f.path, schema.added.length + schema.removed.length + schema.changed.length > 0 ? schema : undefined, resolvers)

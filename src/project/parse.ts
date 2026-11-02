@@ -37,6 +37,61 @@ export function parseIsolated(fileName: string, code: string): IsolatedParse {
   return { sourceFile, errors }
 }
 
+/** Statements that can end without a `;`: the parser's reading of a line break must count (`return\n1` is not `return 1`). */
+const ENDS_WITH_SEMICOLON = new Set([
+  ts.SyntaxKind.ExpressionStatement,
+  ts.SyntaxKind.VariableStatement,
+  ts.SyntaxKind.ReturnStatement,
+  ts.SyntaxKind.ThrowStatement,
+  ts.SyntaxKind.BreakStatement,
+  ts.SyntaxKind.ContinueStatement,
+  ts.SyntaxKind.DoStatement,
+  ts.SyntaxKind.DebuggerStatement,
+  ts.SyntaxKind.ImportDeclaration,
+  ts.SyntaxKind.ImportEqualsDeclaration,
+  ts.SyntaxKind.ExportDeclaration,
+  ts.SyntaxKind.ExportAssignment,
+  ts.SyntaxKind.TypeAliasDeclaration,
+  ts.SyntaxKind.PropertyDeclaration,
+])
+
+/**
+ * The code of a node as the parser read it, without comments or formatting: strings, templates and regular expressions
+ * are one token each, every statement ends with `;`, a trailing comma in `{}` or `()` does not count, and text the
+ * parser skipped is kept. Nodes in `removed` (ranges of the file) are left out, with the comma after them.
+ */
+export function codeTokens(node: ts.Node, sf: ts.SourceFile, removed: readonly (readonly [number, number])[] = []): string[] {
+  const out: string[] = []
+  let at = node.getStart(sf)
+  const isRemoved = (n: ts.Node): boolean => {
+    const start = n.getStart(sf)
+    return n.end > start && removed.some(([a, b]) => start >= a && n.end <= b)
+  }
+  const visit = (n: ts.Node): void => {
+    const children = n.getChildren(sf).filter((c) => !ts.isJSDoc(c))
+    if (children.length === 0) {
+      const skipped = sf.text.slice(at, n.pos).trim()
+      if (skipped) out.push(skipped)
+      const text = n.getText(sf)
+      if ((text === '}' || text === ')') && out[out.length - 1] === ',') out.pop()
+      if (text) out.push(text)
+      at = Math.max(at, n.end)
+    }
+    children.forEach((child, i) => {
+      const previous = children[i - 1]
+      if (child.kind === ts.SyntaxKind.CommaToken && previous && isRemoved(previous)) at = child.end
+      else if (isRemoved(child)) at = child.end
+      else visit(child)
+    })
+    if (ENDS_WITH_SEMICOLON.has(n.kind) && out[out.length - 1] !== ';') out.push(';')
+  }
+  if (!isRemoved(node)) visit(node)
+  return out
+}
+
+/** The tokens of a node as one comparable string. */
+export const codeText = (node: ts.Node, sf: ts.SourceFile, removed?: readonly (readonly [number, number])[]): string => codeTokens(node, sf, removed).join(' ')
+
 /** The expression inside parentheses, `as`, `satisfies`, `!` and `<T>x`. */
 export function unwrap(expr: ts.Expression): ts.Expression {
   let e = expr
