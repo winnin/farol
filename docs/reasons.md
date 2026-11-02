@@ -19,6 +19,8 @@ class; they explain it.
 | `dynamic-route` | unknown | The route adapter met a construct it cannot read statically (spread, `.map`, computed path, component declared in the routes file, imported route array…). Also emitted for the base version when the routes file changed. TypeScript backends: a Hono construct farol cannot follow (a prefix that is not a string literal, `basePath()`, a factory with several returned apps, a mount target that is a parameter, an app farol cannot resolve, `use()` on such an app, spread `route(...args)`). | the routes file, or the file with the Hono construct |
 | `unresolved-import` | unknown | A changed file has an import that does not resolve (or an `import()` / `import.meta.glob` with a computed path; not for targets under `generated` globs), or an unchanged file imports a path this PR deleted or renamed away. Also a changed file of a workspace package of the repository whose import does not resolve (no `src/` source for its `dist/` entry, `preserveSymlinks`). | the importing file; for a workspace package, the changed file of the package |
 | `routes-not-additive` | touches-existing | The routes file was modified and a base route disappeared, changed entry module, layouts or referenced modules, the normalized diff removed lines, or a token of the base outside its imports is gone. One reason per problem. | the routes file |
+| `schema-not-additive` | touches-existing | Backend: a modified schema file changed or removed an existing field, type or operation. | the schema file |
+| `resolvers-not-additive` | touches-existing | Backend: a modified resolvers or handlers file changed an existing resolver or endpoint. | the file |
 | `barrel-not-additive` | touches-existing | A modified barrel contains a statement that is not an export declaration, or a base export declaration is missing or edited. | the barrel |
 | `i18n-not-additive` | touches-existing | A modified i18n file lost a key or changed a value (deep comparison), or it is not JSON. | the i18n file |
 | `existing-file-modified` | touches-existing | An existing source file was modified; the detail lists the existing routes that reach it with the import chain, or names the entry point when the file is one in `backend.entries`. | the file |
@@ -29,11 +31,14 @@ class; they explain it.
 | `infra-file-changed` | touches-existing | An environment, infrastructure or CI file changed (`roles.infra`: env files, Dockerfiles, compose, CI workflows, helm, k8s, terraform…; never source code). No entry point runs it, but deployments do. | the file |
 | `new-file-reached-by-existing-route` | touches-existing | A new file is reached by a route that already existed in the base (through a modified file or a changed route component). | the new file |
 | `tests-modified` | info | An existing test file was modified, deleted or renamed; the detail gives the removed line count. Highlighted in the report. | the test file |
+| `type-only-change` | info | A modified TypeScript file only declares types in both versions: nothing changes at runtime. | the file |
 | `declarations-additive` | info | Go: a modified file whose existing declarations (functions, methods, types, variables, constants) all keep the same code; only new declarations, comments or formatting changed. Compared by a hash of each declaration's tokens. | the Go file |
 | `dependency-changed` | info | A dependency was added, or bumped a minor/patch version, or only its range operator changed. | the manifest |
 | `lockfile-changed` | info | A lockfile changed together with manifest dependency changes. | the lockfile |
 | `route-added` | info | The head route table has a key the base did not have. | the routes file |
 | `routes-additive` | info | The routes file was modified and the routes rule holds. | the routes file |
+| `schema-additive` | info | Backend: a modified schema file only gained fields or types. | the schema file |
+| `resolvers-additive` | info | Backend: a modified resolvers or handlers file only gained resolvers or endpoints. | the file |
 | `barrel-additive` | info | A barrel was modified and only gained export declarations. | the barrel |
 | `i18n-additive` | info | An i18n JSON file was modified and only gained keys. | the i18n file |
 | `new-file-in-new-route` | info | A new file is reached only by routes added in this PR. | the new file |
