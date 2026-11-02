@@ -103,8 +103,10 @@ additive rules, the score) is the same as for React Router.
 - Files and folders starting with `-` are ignored, as the router does.
 
 **Expo Router** (`routes.dir`: the routes directory; by default `app/` in the project, or `src/app/` when only that
-exists). A configured directory is the routes directory when it is named `app` or holds a root `_layout`; otherwise
-farol looks for `app/` and `src/app/` in it. Without one, the table is a *dynamic route* (the PR is `unknown`).
+exists). A project (a directory holding `package.json`) is never the routes directory, even with a stray `_layout` at
+its root. Another configured directory is the routes directory when it is named `app` or holds a root `_layout` (a
+custom `root`); otherwise farol looks for `app/` and `src/app/` in it. Without one, the table is a *dynamic route* (the
+PR is `unknown`).
 
 - Every module (`.tsx`, `.ts`, `.jsx`, `.js`) is a screen; `index` is its folder's path. `[id]` reads as `:id`, `[...rest]` as `*`. Route groups `(group)` and `(a,b)` are left out of the URL; the key keeps the folder path (Expo Router's own route name), so two groups with the same URL stay apart.
 - The `_layout` of every folder above a screen, root included, is one of its layouts.
@@ -112,7 +114,7 @@ farol looks for `app/` and `src/app/` in it. Without one, the table is a *dynami
 - `+not-found` is a screen for every unmatched URL below its folder (path `…/*`).
 - At the root, `+middleware` (server middleware) runs before every screen and API route; `+native-intent` (rewrites every incoming deep link) and `+html` (the web document) are layouts of every screen.
 - Platform modules (`about.ios.tsx`, `.android`, `.native`, `.web`) are modules of the route of `about.tsx`, which is its entry; `_layout.web.tsx` is a layout next to `_layout.tsx`.
-- What Expo Router refuses is a *dynamic route*: another `+` name or a `+html`/`+native-intent`/`+middleware` below the root, an API route with a platform extension, two universal modules for one route (`index.ts` and `index.tsx`).
+- What Expo Router refuses is a *dynamic route*: another `+` name, a `+html`/`+native-intent`/`+middleware` below the root or with a platform extension, an API route with a platform extension, two modules of one route, layout or root module on the same platform (`index.ts` and `index.tsx`, `_layout.ts` and `_layout.tsx`), and a platform module (screen or layout) without the universal module next to it.
 
 **Route changes.** Any file added, removed or changed under the routes directory makes farol read the base table too.
 A new route is additive (`route-added`), a removed route or a route whose layouts changed is `routes-not-additive`,

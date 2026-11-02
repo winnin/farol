@@ -5362,13 +5362,13 @@ ${lanes.join("\n")}
         }
         tracingEnabled2.instant = instant;
         const eventStack = [];
-        function push2(phase, name, args, separateBeginAndEnd = false) {
+        function push(phase, name, args, separateBeginAndEnd = false) {
           if (separateBeginAndEnd) {
             writeEvent("B", phase, name, args);
           }
           eventStack.push({ phase, name, args, time: 1e3 * timestamp(), separateBeginAndEnd });
         }
-        tracingEnabled2.push = push2;
+        tracingEnabled2.push = push;
         function pop(results) {
           Debug.assert(eventStack.length > 0);
           writeStackEvent(eventStack.length - 1, 1e3 * timestamp(), results);
@@ -212535,7 +212535,7 @@ var require_parse = __commonJS({
         state[type]--;
         stack.pop();
       };
-      const push2 = (tok) => {
+      const push = (tok) => {
         if (prev.type === "globstar") {
           const isBrace = state.braces > 0 && (tok.type === "comma" || tok.type === "brace");
           const isExtglob = tok.extglob === true || extglobs.length && (tok.type === "pipe" || tok.type === "paren");
@@ -212569,8 +212569,8 @@ var require_parse = __commonJS({
         token.tokensIndex = tokens2.length;
         const output2 = (opts.capture ? "(" : "") + token.open;
         increment("parens");
-        push2({ type, value: value2, output: state.output ? "" : ONE_CHAR });
-        push2({ type: "paren", extglob: true, value: advance(), output: output2 });
+        push({ type, value: value2, output: state.output ? "" : ONE_CHAR });
+        push({ type: "paren", extglob: true, value: advance(), output: output2 });
         extglobs.push(token);
       };
       const extglobClose = (token) => {
@@ -212590,7 +212590,7 @@ var require_parse = __commonJS({
           }
           state.output = token.output + open2.output;
           state.backtrack = true;
-          push2({ type: "paren", extglob: true, value, output: "" });
+          push({ type: "paren", extglob: true, value, output: "" });
           decrement("parens");
           return;
         }
@@ -212612,7 +212612,7 @@ var require_parse = __commonJS({
             state.negatedExtglob = true;
           }
         }
-        push2({ type: "paren", extglob: true, value, output: output2 });
+        push({ type: "paren", extglob: true, value, output: output2 });
         decrement("parens");
       };
       if (opts.fastpaths !== false && !/(^[*!]|[/()[\]{}"])/.test(input2)) {
@@ -212673,7 +212673,7 @@ var require_parse = __commonJS({
           }
           if (!next) {
             value += "\\";
-            push2({ type: "text", value });
+            push({ type: "text", value });
             continue;
           }
           const match = /^\\+/.exec(remaining());
@@ -212691,7 +212691,7 @@ var require_parse = __commonJS({
             value += advance();
           }
           if (state.brackets === 0) {
-            push2({ type: "text", value });
+            push({ type: "text", value });
             continue;
           }
         }
@@ -212739,13 +212739,13 @@ var require_parse = __commonJS({
         if (value === '"') {
           state.quotes = state.quotes === 1 ? 0 : 1;
           if (opts.keepQuotes === true) {
-            push2({ type: "text", value });
+            push({ type: "text", value });
           }
           continue;
         }
         if (value === "(") {
           increment("parens");
-          push2({ type: "paren", value });
+          push({ type: "paren", value });
           continue;
         }
         if (value === ")") {
@@ -212757,7 +212757,7 @@ var require_parse = __commonJS({
             extglobClose(extglobs.pop());
             continue;
           }
-          push2({ type: "paren", value, output: state.parens ? ")" : "\\)" });
+          push({ type: "paren", value, output: state.parens ? ")" : "\\)" });
           decrement("parens");
           continue;
         }
@@ -212770,19 +212770,19 @@ var require_parse = __commonJS({
           } else {
             increment("brackets");
           }
-          push2({ type: "bracket", value });
+          push({ type: "bracket", value });
           continue;
         }
         if (value === "]") {
           if (opts.nobracket === true || prev && prev.type === "bracket" && prev.value.length === 1) {
-            push2({ type: "text", value, output: `\\${value}` });
+            push({ type: "text", value, output: `\\${value}` });
             continue;
           }
           if (state.brackets === 0) {
             if (opts.strictBrackets === true) {
               throw new SyntaxError(syntaxError2("opening", "["));
             }
-            push2({ type: "text", value, output: `\\${value}` });
+            push({ type: "text", value, output: `\\${value}` });
             continue;
           }
           decrement("brackets");
@@ -212816,13 +212816,13 @@ var require_parse = __commonJS({
             tokensIndex: state.tokens.length
           };
           braces.push(open2);
-          push2(open2);
+          push(open2);
           continue;
         }
         if (value === "}") {
           const brace = braces[braces.length - 1];
           if (opts.nobrace === true || !brace) {
-            push2({ type: "text", value, output: value });
+            push({ type: "text", value, output: value });
             continue;
           }
           let output2 = ")";
@@ -212851,7 +212851,7 @@ var require_parse = __commonJS({
               state.output += t.output || t.value;
             }
           }
-          push2({ type: "brace", value, output: output2 });
+          push({ type: "brace", value, output: output2 });
           decrement("braces");
           braces.pop();
           continue;
@@ -212860,7 +212860,7 @@ var require_parse = __commonJS({
           if (extglobs.length > 0) {
             extglobs[extglobs.length - 1].conditions++;
           }
-          push2({ type: "text", value });
+          push({ type: "text", value });
           continue;
         }
         if (value === ",") {
@@ -212870,7 +212870,7 @@ var require_parse = __commonJS({
             brace.comma = true;
             output2 = "|";
           }
-          push2({ type: "comma", value, output: output2 });
+          push({ type: "comma", value, output: output2 });
           continue;
         }
         if (value === "/") {
@@ -212882,7 +212882,7 @@ var require_parse = __commonJS({
             prev = bos;
             continue;
           }
-          push2({ type: "slash", value, output: SLASH_LITERAL });
+          push({ type: "slash", value, output: SLASH_LITERAL });
           continue;
         }
         if (value === ".") {
@@ -212896,10 +212896,10 @@ var require_parse = __commonJS({
             continue;
           }
           if (state.braces + state.parens === 0 && prev.type !== "bos" && prev.type !== "slash") {
-            push2({ type: "text", value, output: DOT_LITERAL });
+            push({ type: "text", value, output: DOT_LITERAL });
             continue;
           }
-          push2({ type: "dot", value, output: DOT_LITERAL });
+          push({ type: "dot", value, output: DOT_LITERAL });
           continue;
         }
         if (value === "?") {
@@ -212914,14 +212914,14 @@ var require_parse = __commonJS({
             if (prev.value === "(" && !/[!=<:]/.test(next) || next === "<" && !/<([!=]|\w+>)/.test(remaining())) {
               output2 = `\\${value}`;
             }
-            push2({ type: "text", value, output: output2 });
+            push({ type: "text", value, output: output2 });
             continue;
           }
           if (opts.dot !== true && (prev.type === "slash" || prev.type === "bos")) {
-            push2({ type: "qmark", value, output: QMARK_NO_DOT });
+            push({ type: "qmark", value, output: QMARK_NO_DOT });
             continue;
           }
-          push2({ type: "qmark", value, output: QMARK });
+          push({ type: "qmark", value, output: QMARK });
           continue;
         }
         if (value === "!") {
@@ -212942,22 +212942,22 @@ var require_parse = __commonJS({
             continue;
           }
           if (prev && prev.value === "(" || opts.regex === false) {
-            push2({ type: "plus", value, output: PLUS_LITERAL });
+            push({ type: "plus", value, output: PLUS_LITERAL });
             continue;
           }
           if (prev && (prev.type === "bracket" || prev.type === "paren" || prev.type === "brace") || state.parens > 0) {
-            push2({ type: "plus", value });
+            push({ type: "plus", value });
             continue;
           }
-          push2({ type: "plus", value: PLUS_LITERAL });
+          push({ type: "plus", value: PLUS_LITERAL });
           continue;
         }
         if (value === "@") {
           if (opts.noextglob !== true && peek() === "(" && peek(2) !== "?") {
-            push2({ type: "at", extglob: true, value, output: "" });
+            push({ type: "at", extglob: true, value, output: "" });
             continue;
           }
-          push2({ type: "text", value });
+          push({ type: "text", value });
           continue;
         }
         if (value !== "*") {
@@ -212969,7 +212969,7 @@ var require_parse = __commonJS({
             value += match[0];
             state.index += match[0].length;
           }
-          push2({ type: "text", value });
+          push({ type: "text", value });
           continue;
         }
         if (prev && (prev.type === "globstar" || prev.star === true)) {
@@ -212997,13 +212997,13 @@ var require_parse = __commonJS({
           const isStart = prior.type === "slash" || prior.type === "bos";
           const afterStar = before && (before.type === "star" || before.type === "globstar");
           if (opts.bash === true && (!isStart || rest[0] && rest[0] !== "/")) {
-            push2({ type: "star", value, output: "" });
+            push({ type: "star", value, output: "" });
             continue;
           }
           const isBrace = state.braces > 0 && (prior.type === "comma" || prior.type === "brace");
           const isExtglob = extglobs.length && (prior.type === "pipe" || prior.type === "paren");
           if (!isStart && prior.type !== "paren" && !isBrace && !isExtglob) {
-            push2({ type: "star", value, output: "" });
+            push({ type: "star", value, output: "" });
             continue;
           }
           while (rest.slice(0, 3) === "/**") {
@@ -213045,7 +213045,7 @@ var require_parse = __commonJS({
             state.output += prior.output + prev.output;
             state.globstar = true;
             consume(value + advance());
-            push2({ type: "slash", value: "/", output: "" });
+            push({ type: "slash", value: "/", output: "" });
             continue;
           }
           if (prior.type === "bos" && rest[0] === "/") {
@@ -213055,7 +213055,7 @@ var require_parse = __commonJS({
             state.output = prev.output;
             state.globstar = true;
             consume(value + advance());
-            push2({ type: "slash", value: "/", output: "" });
+            push({ type: "slash", value: "/", output: "" });
             continue;
           }
           state.output = state.output.slice(0, -prev.output.length);
@@ -213073,12 +213073,12 @@ var require_parse = __commonJS({
           if (prev.type === "bos" || prev.type === "slash") {
             token.output = nodot + token.output;
           }
-          push2(token);
+          push(token);
           continue;
         }
         if (prev && (prev.type === "bracket" || prev.type === "paren") && opts.regex === true) {
           token.output = value;
-          push2(token);
+          push(token);
           continue;
         }
         if (state.index === state.start || prev.type === "slash" || prev.type === "dot") {
@@ -213097,7 +213097,7 @@ var require_parse = __commonJS({
             prev.output += ONE_CHAR;
           }
         }
-        push2(token);
+        push(token);
       }
       while (state.brackets > 0) {
         if (opts.strictBrackets === true) throw new SyntaxError(syntaxError2("closing", "]"));
@@ -213115,7 +213115,7 @@ var require_parse = __commonJS({
         decrement("braces");
       }
       if (opts.strictSlashes !== true && (prev.type === "star" || prev.type === "bracket")) {
-        push2({ type: "maybe_slash", value: "", output: `${SLASH_LITERAL}?` });
+        push({ type: "maybe_slash", value: "", output: `${SLASH_LITERAL}?` });
       }
       if (state.backtrack === true) {
         state.output = "";
@@ -248499,7 +248499,7 @@ function commandBelow(expr) {
 }
 function cliNodes(sf) {
   const out = [];
-  const push2 = (spec, node2, value) => {
+  const push = (spec, node2, value) => {
     if (spec === void 0) return;
     const text = literal2(spec);
     if (text === void 0) {
@@ -248515,10 +248515,10 @@ function cliNodes(sf) {
       const args = node2.arguments;
       if (method === "action" && args.length === 1 && isFunctionLike(args[0])) {
         const command = commandBelow(node2.expression.expression);
-        if (command !== void 0) push2(command.arguments[0], node2, args[0]);
+        if (command !== void 0) push(command.arguments[0], node2, args[0]);
       } else if (method === "command" && args.length >= 3 && isDescription(args[1]) && isFunctionLike(args[args.length - 1])) {
         const handler = args[args.length - 1];
-        if (handler !== void 0) push2(args[0], node2, handler);
+        if (handler !== void 0) push(args[0], node2, handler);
       }
     }
     import_typescript7.default.forEachChild(node2, visit3);
@@ -250020,12 +250020,13 @@ function has(files, dir) {
 function routesDir(input2) {
   const at = (d) => input2.file === "" ? d : `${input2.file}/${d}`;
   const isRootLayout = (f) => splitPlatform(routeModulePath(input2.file, f) ?? "").stem === "_layout";
-  if (posix11.basename(input2.file) === "app" || input2.files.some(isRootLayout)) return input2.file;
+  const project = input2.files.includes(at("package.json"));
+  if (!project && (posix11.basename(input2.file) === "app" || input2.files.some(isRootLayout))) return input2.file;
   return [at("app"), at("src/app")].find((d) => has(input2.files, d)) ?? null;
 }
 function splitPlatform(name) {
   const dot = name.lastIndexOf(".");
-  return dot > 0 && PLATFORMS.has(name.slice(dot + 1)) ? { stem: name.slice(0, dot), platform: true } : { stem: name, platform: false };
+  return dot > 0 && PLATFORMS.has(name.slice(dot + 1)) ? { stem: name.slice(0, dot), platform: name.slice(dot + 1) } : { stem: name, platform: "" };
 }
 function isGroup(segment) {
   return segment.startsWith("(") && segment.endsWith(")");
@@ -250036,8 +250037,11 @@ function urlSegment(segment) {
   if (segment.startsWith("[") && segment.endsWith("]")) return `:${segment.slice(1, -1)}`;
   return segment;
 }
-function push(map2, key, file2) {
-  map2.set(key, [...map2.get(key) ?? [], file2]);
+function modulesOf(variants) {
+  if (variants === void 0) return [];
+  const universal = variants.get("");
+  const platforms = [...variants].filter(([p]) => p !== "").map(([, f]) => f).sort(compareStrings);
+  return universal === void 0 ? platforms : [universal, ...platforms];
 }
 function extract(input2) {
   const dir = routesDir(input2);
@@ -250046,34 +250050,47 @@ function extract(input2) {
   const layoutsIn = /* @__PURE__ */ new Map();
   const root = /* @__PURE__ */ new Map();
   const found = /* @__PURE__ */ new Map();
+  const add = (variants, platform, file2, name) => {
+    const prev = variants.get(platform);
+    if (prev === void 0) variants.set(platform, file2);
+    else dynamic.push({ file: file2, line: 1, detail: `${name} is defined twice: ${prev} and ${file2}` });
+  };
+  const variantsOf = (map2, key) => {
+    const variants = map2.get(key) ?? /* @__PURE__ */ new Map();
+    map2.set(key, variants);
+    return variants;
+  };
   for (const file2 of input2.files) {
     const rel = routeModulePath(dir, file2);
     if (rel === null) continue;
     const folder = rel.split("/");
     const { stem: stem2, platform } = splitPlatform(folder.pop() ?? "");
     const api = stem2.endsWith(API_SUFFIX);
-    if (stem2 === "_layout") push(layoutsIn, folder.join("/"), file2);
-    else if (folder.length === 0 && ROOT_MODULES.includes(stem2)) push(root, stem2, file2);
-    else if (api && platform) dynamic.push({ file: file2, line: 1, detail: "Expo Router API routes cannot have platform extensions" });
+    if (stem2 === "_layout") add(variantsOf(layoutsIn, folder.join("/")), platform, file2, `layout /${folder.join("/")}`);
+    else if (folder.length === 0 && platform === "" && ROOT_MODULES.includes(stem2)) add(variantsOf(root, stem2), platform, file2, stem2);
+    else if (api && platform !== "") dynamic.push({ file: file2, line: 1, detail: "Expo Router API routes cannot have platform extensions" });
     else if (stem2.startsWith("+") && stem2 !== "+not-found" && !api || isGroup(stem2)) dynamic.push({ file: file2, line: 1, detail: `${stem2} is not an Expo Router route name` });
     else {
       const key = `/${[...folder, stem2].join("/")}`;
-      const route = found.get(key) ?? { folder, name: api ? stem2.slice(0, -API_SUFFIX.length) : stem2, api, files: [], universal: null };
-      if (!platform && route.universal !== null) dynamic.push({ file: file2, line: 1, detail: `route ${key} is defined twice: ${route.universal} and ${file2}` });
-      if (!platform) route.universal ??= file2;
-      route.files.push(file2);
+      const route = found.get(key) ?? { folder, name: api ? stem2.slice(0, -API_SUFFIX.length) : stem2, api, variants: /* @__PURE__ */ new Map() };
       found.set(key, route);
+      add(route.variants, platform, file2, `route ${key}`);
     }
   }
-  const rootModules = (names) => names.flatMap((n) => [...root.get(n) ?? []].sort(compareStrings));
+  const needsFallback = (variants) => {
+    if (!variants.has("")) for (const f of modulesOf(variants)) dynamic.push({ file: f, line: 1, detail: `${posix11.basename(f)} has no module without a platform extension next to it` });
+  };
+  for (const variants of layoutsIn.values()) needsFallback(variants);
+  const rootModules = (names) => names.flatMap((n) => modulesOf(root.get(n)));
   const routes = [];
   for (const [key, r] of found) {
+    needsFallback(r.variants);
     const layouts = rootModules(r.api ? API_ROOT_MODULES : ROOT_MODULES);
-    if (!r.api) for (let i = 0; i <= r.folder.length; i++) layouts.push(...[...layoutsIn.get(r.folder.slice(0, i).join("/")) ?? []].sort(compareStrings));
-    const modules = [...r.files].sort(compareStrings);
+    if (!r.api) for (let i = 0; i <= r.folder.length; i++) layouts.push(...modulesOf(layoutsIn.get(r.folder.slice(0, i).join("/"))));
+    const modules = modulesOf(r.variants);
     const index = r.name === "index";
     const last = r.name === "+not-found" ? ["*"] : index ? [] : [r.name];
-    routes.push({ key, path: urlPath([...r.folder, ...last].map(urlSegment)), index, entry: r.universal ?? modules[0] ?? null, modules, layouts });
+    routes.push({ key, path: urlPath([...r.folder, ...last].map(urlSegment)), index, entry: modules[0] ?? null, modules: [...modules].sort(compareStrings), layouts });
   }
   if (routes.length === 0) dynamic.push({ file: dir === "" ? "." : dir, line: 1, detail: `no Expo Router route found: expected route modules under ${dir === "" ? "the project" : dir}` });
   return routeTable(routes, dynamic, routes.flatMap((r) => [...r.modules, ...r.layouts]));

@@ -15,20 +15,22 @@ function has(files: readonly string[], dir: string): boolean {
 }
 
 /**
- * The routes directory: the configured one when it is named `app` or has a root `_layout`, else its `app/` or `src/app/`
- * when they hold files; null when none does (the project itself is never read as routes).
+ * The routes directory. A project (it holds `package.json`) is never one: its `app/` or `src/app/` is. Another directory
+ * is the routes directory when it is named `app` or has a root `_layout` (a custom `root`); otherwise its `app/` or
+ * `src/app/`. Null when there is none.
  */
 function routesDir(input: RouteAdapterInput): string | null {
   const at = (d: string): string => (input.file === '' ? d : `${input.file}/${d}`)
   const isRootLayout = (f: string): boolean => splitPlatform(routeModulePath(input.file, f) ?? '').stem === '_layout'
-  if (posix.basename(input.file) === 'app' || input.files.some(isRootLayout)) return input.file
+  const project = input.files.includes(at('package.json'))
+  if (!project && (posix.basename(input.file) === 'app' || input.files.some(isRootLayout))) return input.file
   return [at('app'), at('src/app')].find((d) => has(input.files, d)) ?? null
 }
 
-/** `about.web` → `about`: a platform-specific module belongs to the route of its universal module. */
-function splitPlatform(name: string): { stem: string; platform: boolean } {
+/** `about.web` → `about` on `web`: a platform-specific module belongs to the route of its universal module (platform ''). */
+function splitPlatform(name: string): { stem: string; platform: string } {
   const dot = name.lastIndexOf('.')
-  return dot > 0 && PLATFORMS.has(name.slice(dot + 1)) ? { stem: name.slice(0, dot), platform: true } : { stem: name, platform: false }
+  return dot > 0 && PLATFORMS.has(name.slice(dot + 1)) ? { stem: name.slice(0, dot), platform: name.slice(dot + 1) } : { stem: name, platform: '' }
 }
 
 function isGroup(segment: string): boolean {
@@ -43,18 +45,23 @@ function urlSegment(segment: string): string {
   return segment
 }
 
+/** The modules of one route, layout or root module, by platform ('' for the universal module). */
+type Variants = Map<string, string>
+
 interface Found {
   folder: string[]
   /** Last URL segment (`index` for the folder's own path, `+not-found` for anything unmatched). */
   name: string
   api: boolean
-  files: string[]
-  /** The module without a platform extension, which Expo Router requires next to platform modules. */
-  universal: string | null
+  variants: Variants
 }
 
-function push(map: Map<string, string[]>, key: string, file: string): void {
-  map.set(key, [...(map.get(key) ?? []), file])
+/** Modules of `variants`: the universal one first, then the platform ones sorted. */
+function modulesOf(variants: Variants | undefined): string[] {
+  if (variants === undefined) return []
+  const universal = variants.get('')
+  const platforms = [...variants].filter(([p]) => p !== '').map(([, f]) => f).sort(compareStrings)
+  return universal === undefined ? platforms : [universal, ...platforms]
 }
 
 /**
@@ -67,38 +74,53 @@ function extract(input: RouteAdapterInput): RouteTable {
   const dir = routesDir(input)
   if (dir === null) return routeTable([], [{ file: input.file === '' ? '.' : input.file, line: 1, detail: `no Expo Router routes directory found: expected app/ or src/app/ in ${input.file === '' ? 'the project' : input.file}, or set routes.dir to it` }], [])
   const dynamic: DynamicRoute[] = []
-  const layoutsIn = new Map<string, string[]>()
-  const root = new Map<string, string[]>()
+  const layoutsIn = new Map<string, Variants>()
+  const root = new Map<string, Variants>()
   const found = new Map<string, Found>()
+  // Expo Router refuses two modules of one name on the same platform (`index.ts` and `index.tsx`).
+  const add = (variants: Variants, platform: string, file: string, name: string): void => {
+    const prev = variants.get(platform)
+    if (prev === undefined) variants.set(platform, file)
+    else dynamic.push({ file, line: 1, detail: `${name} is defined twice: ${prev} and ${file}` })
+  }
+  const variantsOf = (map: Map<string, Variants>, key: string): Variants => {
+    const variants = map.get(key) ?? new Map<string, string>()
+    map.set(key, variants)
+    return variants
+  }
   for (const file of input.files) {
     const rel = routeModulePath(dir, file)
     if (rel === null) continue
     const folder = rel.split('/')
     const { stem, platform } = splitPlatform(folder.pop() ?? '')
     const api = stem.endsWith(API_SUFFIX)
-    if (stem === '_layout') push(layoutsIn, folder.join('/'), file)
-    else if (folder.length === 0 && ROOT_MODULES.includes(stem)) push(root, stem, file)
-    else if (api && platform) dynamic.push({ file, line: 1, detail: 'Expo Router API routes cannot have platform extensions' })
+    if (stem === '_layout') add(variantsOf(layoutsIn, folder.join('/')), platform, file, `layout /${folder.join('/')}`)
+    else if (folder.length === 0 && platform === '' && ROOT_MODULES.includes(stem)) add(variantsOf(root, stem), platform, file, stem)
+    else if (api && platform !== '') dynamic.push({ file, line: 1, detail: 'Expo Router API routes cannot have platform extensions' })
     else if ((stem.startsWith('+') && stem !== '+not-found' && !api) || isGroup(stem)) dynamic.push({ file, line: 1, detail: `${stem} is not an Expo Router route name` })
     else {
       // Expo Router's own route key: the folder path with groups and `index`, so groups that share a URL stay apart.
       const key = `/${[...folder, stem].join('/')}`
-      const route = found.get(key) ?? { folder, name: api ? stem.slice(0, -API_SUFFIX.length) : stem, api, files: [], universal: null }
-      if (!platform && route.universal !== null) dynamic.push({ file, line: 1, detail: `route ${key} is defined twice: ${route.universal} and ${file}` })
-      if (!platform) route.universal ??= file
-      route.files.push(file)
+      const route = found.get(key) ?? { folder, name: api ? stem.slice(0, -API_SUFFIX.length) : stem, api, variants: new Map<string, string>() }
       found.set(key, route)
+      add(route.variants, platform, file, `route ${key}`)
     }
   }
-  const rootModules = (names: readonly string[]): string[] => names.flatMap((n) => [...(root.get(n) ?? [])].sort(compareStrings))
+  // Expo Router refuses a platform module without the universal one next to it.
+  const needsFallback = (variants: Variants): void => {
+    if (!variants.has('')) for (const f of modulesOf(variants)) dynamic.push({ file: f, line: 1, detail: `${posix.basename(f)} has no module without a platform extension next to it` })
+  }
+  for (const variants of layoutsIn.values()) needsFallback(variants)
+  const rootModules = (names: readonly string[]): string[] => names.flatMap((n) => modulesOf(root.get(n)))
   const routes: RouteEntry[] = []
   for (const [key, r] of found) {
+    needsFallback(r.variants)
     const layouts = rootModules(r.api ? API_ROOT_MODULES : ROOT_MODULES)
-    if (!r.api) for (let i = 0; i <= r.folder.length; i++) layouts.push(...[...(layoutsIn.get(r.folder.slice(0, i).join('/')) ?? [])].sort(compareStrings))
-    const modules = [...r.files].sort(compareStrings)
+    if (!r.api) for (let i = 0; i <= r.folder.length; i++) layouts.push(...modulesOf(layoutsIn.get(r.folder.slice(0, i).join('/'))))
+    const modules = modulesOf(r.variants)
     const index = r.name === 'index'
     const last = r.name === '+not-found' ? ['*'] : index ? [] : [r.name]
-    routes.push({ key, path: urlPath([...r.folder, ...last].map(urlSegment)), index, entry: r.universal ?? modules[0] ?? null, modules, layouts })
+    routes.push({ key, path: urlPath([...r.folder, ...last].map(urlSegment)), index, entry: modules[0] ?? null, modules: [...modules].sort(compareStrings), layouts })
   }
   if (routes.length === 0) dynamic.push({ file: dir === '' ? '.' : dir, line: 1, detail: `no Expo Router route found: expected route modules under ${dir === '' ? 'the project' : dir}` })
   return routeTable(routes, dynamic, routes.flatMap((r) => [...r.modules, ...r.layouts]))

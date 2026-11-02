@@ -145,24 +145,39 @@ describe('expo-router adapter', () => {
     expect(t.sources).toContain('mobile/app/+native-intent.ts')
   })
 
-  it('takes a configured app directory, or one with a root _layout, as is', () => {
+  it('takes a configured app directory, or one with a root _layout, as is; never the project', () => {
     const t = extract(expoRouterAdapter, 'src/app', { 'src/app/index.tsx': '', 'src/app/app/settings.tsx': '' })
     expect(t.routes.map((r) => r.path)).toEqual(['/app/settings', '/'])
     const custom = extract(expoRouterAdapter, 'screens', { 'screens/_layout.tsx': '', 'screens/home.tsx': '', 'screens/app/x.tsx': '' })
     expect(custom.routes.map((r) => r.key)).toEqual(['/app/x', '/home'])
+    const project = extract(expoRouterAdapter, '', { 'package.json': '', '_layout.tsx': '', 'components/Card.tsx': '', 'app/index.tsx': '' })
+    expect(project.routes.map((r) => r.entry)).toEqual(['app/index.tsx'])
   })
 
   it('reports what Expo Router refuses, and a project with no route (fail closed)', () => {
     const t = extract(expoRouterAdapter, 'app', {
+      'app/_layout.ts': '',
+      'app/_layout.tsx': '',
+      'app/+html.ts': '',
+      'app/+html.tsx': '',
+      'app/+native-intent.ios.ts': '',
       'app/index.tsx': '',
       'app/index.ts': '',
+      'app/about.ios.tsx': '',
+      'app/tabs/_layout.web.tsx': '',
+      'app/tabs/home.tsx': '',
       'app/settings/+html.tsx': '',
       'app/hello+api.web.ts': '',
     })
     expect(t.dynamic.map((d) => [d.file, d.detail])).toEqual([
+      ['app/+html.tsx', '+html is defined twice: app/+html.ts and app/+html.tsx'],
+      ['app/+native-intent.ios.ts', '+native-intent is not an Expo Router route name'],
+      ['app/_layout.tsx', 'layout / is defined twice: app/_layout.ts and app/_layout.tsx'],
+      ['app/about.ios.tsx', 'about.ios.tsx has no module without a platform extension next to it'],
       ['app/hello+api.web.ts', 'Expo Router API routes cannot have platform extensions'],
       ['app/index.tsx', 'route /index is defined twice: app/index.ts and app/index.tsx'],
       ['app/settings/+html.tsx', '+html is not an Expo Router route name'],
+      ['app/tabs/_layout.web.tsx', '_layout.web.tsx has no module without a platform extension next to it'],
     ])
     expect(extract(expoRouterAdapter, '', { 'src/a.ts': '' }).dynamic.map((d) => d.detail)).toEqual(['no Expo Router routes directory found: expected app/ or src/app/ in the project, or set routes.dir to it'])
     expect(extract(expoRouterAdapter, 'app', { 'app/README.md': '' }).dynamic.map((d) => d.detail)).toEqual(['no Expo Router route found: expected route modules under app'])
