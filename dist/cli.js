@@ -236449,6 +236449,8 @@ function date4(params) {
 
 // src/config/schema.ts
 var globs = external_exports.array(external_exports.string().min(1, "glob patterns cannot be empty"));
+var ENTRY_KINDS = ["JOB", "CONSUMER", "RPC", "RUN"];
+var entryGlob = external_exports.string().min(1, "glob patterns cannot be empty").refine((g) => !g.startsWith("!") && !g.split("/").some((seg) => seg === "." || seg === ".."), 'write a positive glob relative to the project, with no "!", "./" or "../"');
 var DEFAULT_INFRA = [
   "**/.env",
   "**/.env.*",
@@ -236539,7 +236541,7 @@ var ConfigSchema = external_exports.object({
     /** Import roots, relative to the project: `src` for a src layout (`from orders_api import x` is src/orders_api/x.py). */
     roots: external_exports.array(external_exports.string().min(1)).min(1).default(["src", "."])
   }).strict().prefault({}),
-  /** frontend: React routes are the entry points; backend: GraphQL operations and REST endpoints are. */
+  /** frontend: React routes are the entry points; backend: GraphQL operations, REST endpoints and `backend.entries` are. */
   surface: external_exports.enum(["frontend", "backend"]).default("frontend"),
   tsconfig: external_exports.string().min(1).default("tsconfig.json"),
   backend: external_exports.object({
@@ -236555,9 +236557,10 @@ var ConfigSchema = external_exports.object({
     context: external_exports.record(external_exports.string().min(1), globs).default({}),
     /**
      * Files that run outside HTTP and GraphQL (Kafka handlers, cron jobs, gRPC services, scripts), by kind. Each
-     * matching file is one entry point, `<KIND> <repo-relative file>`, that runs the code the file uses.
+     * matching file of the TypeScript program is one entry point, `<KIND> <repo-relative file>`, that runs the code
+     * the file uses.
      */
-    entries: external_exports.partialRecord(external_exports.enum(["JOB", "CONSUMER", "RPC", "RUN"]), globs).default({})
+    entries: external_exports.partialRecord(external_exports.enum(ENTRY_KINDS), external_exports.array(entryGlob)).default({})
   }).strict().prefault({}),
   routes: external_exports.object({
     /** react-router: a route table in `file`. next, tanstack-router: file-system routing under `dir`. */
@@ -237150,6 +237153,15 @@ function routeSegment(route) {
   if (route.path !== void 0) return route.path;
   if (route.index) return "(index)";
   return route.entry === null ? "(layout)" : `(layout:${route.entry})`;
+}
+
+// src/classify/entry-files.ts
+function editedEntryFiles(configEntries, files, existing) {
+  return existing.flatMap((route) => {
+    const path3 = configEntries.get(route.key);
+    const file2 = files.find((f) => f.path === path3 && f.status === "modified");
+    return file2 ? [{ route, file: file2 }] : [];
+  });
 }
 
 // src/classify/additive.ts
@@ -238045,6 +238057,11 @@ function classify(input2) {
     if (hits.length > 0) reasons.push(reason("existing-file-modified", `reached by ${hits.length} existing route(s): ${describeHits(hits)}`, target.path));
     else reasons.push(reason("existing-file-unreachable", nodes.has(target.path) ? "modified, and no route reaches it" : "modified, and it is not part of the import graph", target.path));
   }
+  for (const { route, file: file2 } of editedEntryFiles(input2.backend?.configEntries ?? /* @__PURE__ */ new Map(), outputFiles, existingRoutes)) {
+    affected.add(route, file2.path, [file2.path]);
+    if (file2.additive) file2.additive = false;
+    if (!reasons.some((r) => r.file === file2.path && r.code === "existing-file-modified")) reasons.push(reason("existing-file-modified", `the file of entry point ${route.key}`, file2.path));
+  }
   for (const file2 of newFiles) {
     const impact = impactOf(file2);
     if (impact?.newEntriesReaching !== void 0) {
@@ -238489,7 +238506,7 @@ var RiskSchema = external_exports.object({
 var RouteRefSchema = external_exports.object({ key: external_exports.string(), path: external_exports.string() }).strict();
 var OutputSchema = external_exports.object({
   schemaVersion: external_exports.literal(1),
-  /** What the entry points are: React pages (frontend) or GraphQL operations and REST endpoints (backend). */
+  /** What the entry points are: React pages (frontend) or GraphQL operations, REST endpoints and configured files (backend). */
   surface: external_exports.enum(["frontend", "backend"]),
   /** "revscope" in results written before the project was renamed. */
   tool: external_exports.object({ name: external_exports.enum(["farol", "revscope"]), version: external_exports.string() }).strict(),
@@ -249813,7 +249830,11 @@ async function backendImpacts(ctx, table3, files, roleOf, baseSha, headSha) {
   }
   const baseRest = table3.restKeysWithout(new Set(addedMounts.map((m) => m.id)), addedAnchors);
   const addedFiles = new Set(files.filter((f) => f.status === "added").map((f) => f.path));
-  const inBase = (r) => r.entry !== null ? !addedFiles.has(r.entry) : r.key.includes(" ") ? baseRest.has(r.key) : !addedOperations.has(r.key);
+  const inBase = (r) => {
+    const file2 = table3.configEntries.get(r.key);
+    if (file2 !== void 0) return !addedFiles.has(file2);
+    return r.key.includes(" ") ? baseRest.has(r.key) : !addedOperations.has(r.key);
+  };
   const baseRoutes = table3.operations.filter(inBase);
   return { impacts: mountImpacts(table3, addedMounts, baseRest, duplicateEndpoints(impacts, baseRest)), baseRoutes: { routes: baseRoutes, dynamic: [], sources: [] }, contracts: await schemaContracts(ctx, table3, files, baseSha) };
 }
@@ -250406,6 +250427,16 @@ function usesGlobal(sf, name, checker) {
 
 // src/backend/entrypoints.ts
 var import_picomatch2 = __toESM(require_picomatch2(), 1);
+function configuredEntries(byKind, programFiles, rel, anchorsOf) {
+  return Object.entries(byKind).flatMap(([kind, globs3]) => {
+    const match = (0, import_picomatch2.default)([...globs3], { dot: true });
+    return programFiles.filter((sf) => match(rel(sf.fileName))).map((sf) => {
+      const file2 = rel(sf.fileName);
+      const key = `${kind} ${file2}`;
+      return { key, path: key, index: false, entry: file2, modules: anchorsOf(sf).filter((m) => m !== file2), layouts: [] };
+    });
+  });
+}
 function buildBackendTable(input2) {
   const root = input2.repoRoot.replaceAll("\\", "/");
   const rel = (fileName) => posix9.relative(root, fileName.replaceAll("\\", "/"));
@@ -250535,16 +250566,12 @@ function buildBackendTable(input2) {
     const installed = honoKeys.has(key) ? registrations.filter((reg) => reg.paths.some((p) => underPath(keyPath(key), p))).flatMap((reg) => reg.modules) : [];
     entries.push({ key, path: key, index: false, entry: null, modules: sortedUnique([...[...ids].flatMap((id) => [...anchors.get(id)?.modules ?? []]), ...installed]), layouts: [] });
   }
-  for (const [kind, globs3] of Object.entries(input2.entries)) {
-    const match = (0, import_picomatch2.default)([...globs3], { dot: true });
-    for (const sf of programFiles) {
-      const file2 = rel(sf.fileName);
-      if (match(file2)) entries.push({ key: `${kind} ${file2}`, path: `${kind} ${file2}`, index: false, entry: file2, modules: anchorsOf(sf).filter((m) => m !== file2), layouts: [] });
-    }
-  }
+  const configured = configuredEntries(input2.entries, programFiles, rel, anchorsOf);
+  entries.push(...configured);
   entries.sort((a, b) => compareStrings(a.key, b.key));
   return {
     operations: entries,
+    configEntries: new Map(configured.map((e) => [e.key, e.entry])),
     resolverKeys,
     operationTypes,
     rootTypes: new Set(Object.values(schema.roots)),
@@ -252471,7 +252498,7 @@ async function runAnalyze(ctx, options, deps) {
       const existing = new Set((baseRoutes ?? ws.routes).routes.map((r) => r.key));
       const declImpactMap = declImpacts(baseOut, head, declChanged, () => true, { existing, erasedTypes: true });
       lap("base");
-      result = classify({ files, roleOf, isGenerated: createGeneratedMatcher(ctx.config.generated, ctx.projectPrefix, ctx.config.generated.length === 0 ? [] : await listFiles(ctx.repoRoot, meta3.head.sha)), manifests, otherManifests, typeOnlyFiles, declImpacts: declImpactMap, ...backend ? { backend: { impacts: backend.impacts } } : {}, graph: ws.graph, routesFile: ws.routesFile, ...ws.routesFromDirectory ? { routesFromDirectory: true } : {}, headRoutes: ws.routes, baseRoutes, baseText, headText });
+      result = classify({ files, roleOf, isGenerated: createGeneratedMatcher(ctx.config.generated, ctx.projectPrefix, ctx.config.generated.length === 0 ? [] : await listFiles(ctx.repoRoot, meta3.head.sha)), manifests, otherManifests, typeOnlyFiles, declImpacts: declImpactMap, ...backend && ws.backend ? { backend: { impacts: backend.impacts, configEntries: ws.backend.configEntries } } : {}, graph: ws.graph, routesFile: ws.routesFile, ...ws.routesFromDirectory ? { routesFromDirectory: true } : {}, headRoutes: ws.routes, baseRoutes, baseText, headText });
     }
     for (const f of result.files) if (f.status === "added" && (f.role === "source" || f.role === "barrel") && isScriptFile(f.path) && isDeclarationsOnlyModule(f.path, readHead(f.path) ?? "x(")) f.declarationsOnly = true;
     lap("classify");
@@ -253426,11 +253453,13 @@ import { posix as posix19 } from "path";
 function moduleOf(o, path3) {
   if (o.surface === "backend") {
     const parts = path3.split(" ");
+    const kind = parts[0] ?? "";
+    const rest = path3.slice(kind.length + 1);
+    if (ENTRY_KINDS.includes(kind) && !rest.startsWith("/") && isScriptFile(rest)) return kind;
     if (parts.length >= 3) return `${parts[0] ?? ""} ${parts[1] ?? ""}`;
     if (parts.length === 2) {
       const first2 = (parts[1] ?? "").split("/").filter((s) => s !== "")[0];
-      const namedByFile = parts[0] === "RUN" || isScriptFile(parts[1] ?? "");
-      return namedByFile ? parts[0] ?? "" : `${parts[0] ?? ""} /${first2 ?? ""}`;
+      return parts[0] === "RUN" ? "RUN" : `${parts[0] ?? ""} /${first2 ?? ""}`;
     }
     return path3.split(".")[0] ?? path3;
   }

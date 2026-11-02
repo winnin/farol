@@ -156,6 +156,8 @@ directory.
 - **`backend.context`**: values injected at runtime that the import graph cannot see, as context property → provider
   files. With `"context": { "loaders": ["src/modules/*/loaders/index.ts"] }`, a resolver reading
   `ctx.loaders.Brand.byId()` uses the provider whose directory or name matches `Brand`.
+- **`backend.entries`**: files that run outside HTTP and GraphQL, as kind (`JOB`, `CONSUMER`, `RPC`, `RUN`) → globs. With
+  `"entries": { "JOB": ["src/jobs/*.job.ts"] }`, each job file is an entry point that runs the code it uses.
 - Set `"graphql": false` or `"rest": false` to skip one of them.
 
 **Reports and CI:** as for [React Router](#react-router) (Jest or Vitest coverage, ESLint, audit), with

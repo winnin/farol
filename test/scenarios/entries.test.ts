@@ -33,6 +33,7 @@ const withJob: Change = (repo) => {
 
 const pr = (change: Change, setup: Change = withJob): Promise<Output> => analyzeVariant('b7-rest', cleanups, change, setup)
 const codes = (o: Output): string[] => o.reasons.map((r) => r.code)
+const routeKeys = (stdout: string): string[] => (JSON.parse(stdout) as { routes: { key: string }[] }).routes.map((r) => r.key)
 
 describe('entry points named in backend.entries', () => {
   it('a change to code a job runs lists the job, with the chain from what it uses', async () => {
@@ -73,6 +74,56 @@ describe('entry points named in backend.entries', () => {
     expect(o.routes.affected.map((r) => r.key)).toEqual([`JOB ${MOVED}`])
   })
 
+  describe('an edit of the file named as an entry point', () => {
+    const SIDE = 'export const s = (() => 1)()\n'
+    const entries = (globs: Record<string, string[]>): Change => (repo) => {
+      withJob(repo)
+      repo.write('farol.config.json', JSON.stringify({ surface: 'backend', backend: { entries: globs } }))
+      repo.write('src/lib/side.ts', SIDE)
+    }
+    const RE_EXPORT = "export { s } from '../lib/side'\n"
+    const SERVER = "import express from 'express'\nconst port = 1\nexport const app = express()\napp.get('/x', async () => port)\n"
+
+    it('is a change when the file is a barrel', async () => {
+      const BARREL = 'src/jobs/index.ts'
+      const o = await pr((repo) => { repo.write(BARREL, `export { a } from '../lib/a'\n${RE_EXPORT}`) }, (repo) => {
+        entries({ JOB: [BARREL] })(repo)
+        repo.write(BARREL, "export { a } from '../lib/a'\n")
+      })
+      expect(o.classification).toBe('touches-existing')
+      expect(o.routes.affected.map((r) => r.key)).toEqual([`JOB ${BARREL}`])
+    })
+
+    it('is a change when the file has REST handlers and only gains a re-export', async () => {
+      const FILE = 'src/rest/server.ts'
+      const o = await pr((repo) => { repo.write(FILE, `${SERVER}${RE_EXPORT}`) }, (repo) => {
+        entries({ RUN: [FILE] })(repo)
+        repo.write(FILE, SERVER)
+      })
+      expect(o.classification).toBe('touches-existing')
+      expect(o.routes.affected.map((r) => r.key)).toContain(`RUN ${FILE}`)
+    })
+
+    it('lists the entry point beside the endpoints of its file', async () => {
+      const FILE = 'src/rest/server.ts'
+      const o = await pr((repo) => { repo.write(FILE, SERVER.replace('port = 1', 'port = 2')) }, (repo) => {
+        entries({ RUN: [FILE] })(repo)
+        repo.write(FILE, SERVER)
+      })
+      expect(o.routes.affected.map((r) => r.key)).toEqual(['GET /x', `RUN ${FILE}`])
+    })
+
+    it('is a change when a plain job gains a Hono app that runs its code', async () => {
+      const HONO = "import { Hono } from 'hono'\nexport function run() { return 1 }\nexport const app = new Hono()\napp.get('/x', (c) => c.text(String(run())))\n"
+      const o = await pr((repo) => { repo.write(JOB_FILE, HONO) }, (repo) => {
+        entries({ JOB: [JOB_FILE] })(repo)
+        repo.write(JOB_FILE, 'export function run() { return 1 }\n')
+      })
+      expect(o.classification).toBe('touches-existing')
+      expect(o.routes.affected.map((r) => r.key)).toContain(JOB)
+    })
+  })
+
   it('a test file that matches a glob is not an entry point', () => {
     const s = createScenarioRepo('b7-rest')
     cleanups.push(() => { s.repo.cleanup(); })
@@ -80,8 +131,7 @@ describe('entry points named in backend.entries', () => {
     s.repo.write('src/jobs/drain.job.ts', 'export const drain = () => 1\n')
     s.repo.write('src/jobs/drain.job.test.ts', 'export const check = () => 1\n')
     const head = s.repo.commit('jobs')
-    const table = JSON.parse(runCli(['--cwd', s.repo.dir, 'routes', '--ref', head]).stdout) as { routes: { key: string }[] }
-    expect(table.routes.map((r) => r.key).filter((k) => k.startsWith('JOB'))).toEqual(['JOB src/jobs/drain.job.ts'])
+    expect(routeKeys(runCli(['--cwd', s.repo.dir, 'routes', '--ref', head]).stdout).filter((k) => k.startsWith('JOB'))).toEqual(['JOB src/jobs/drain.job.ts'])
   })
 
   it('routes lists entry points in order, and impact finds them', () => {
@@ -93,10 +143,8 @@ describe('entry points named in backend.entries', () => {
     const head = s.repo.commit('entries')
     const routes = runCli(['--cwd', s.repo.dir, 'routes', '--ref', head])
     expect(routes.code).toBe(0)
-    const keys = (JSON.parse(routes.stdout) as { routes: { key: string }[] }).routes.map((r) => r.key)
-    expect(keys.filter((k) => /^(JOB|RUN) /.test(k))).toEqual([JOB, 'RUN src/scripts/seed.ts'])
-    const impact = JSON.parse(runCli(['--cwd', s.repo.dir, 'impact', 'src/lib/b.ts', '--ref', head]).stdout) as { routes: { key: string }[] }
-    expect(impact.routes.map((r) => r.key)).toEqual([JOB, 'RUN src/scripts/seed.ts'])
+    expect(routeKeys(routes.stdout).filter((k) => /^(JOB|RUN) /.test(k))).toEqual([JOB, 'RUN src/scripts/seed.ts'])
+    expect(routeKeys(runCli(['--cwd', s.repo.dir, 'impact', 'src/lib/b.ts', '--ref', head]).stdout)).toEqual([JOB, 'RUN src/scripts/seed.ts'])
   })
 
   it('globs are relative to the project in a monorepo, and keys to the repository', () => {
@@ -109,7 +157,6 @@ describe('entry points named in backend.entries', () => {
     const head = repo.commit('base')
     const r = runCli(['--cwd', join(repo.dir, 'services/x'), 'routes', '--ref', head])
     expect(r.code).toBe(0)
-    const keys = (JSON.parse(r.stdout) as { routes: { key: string }[] }).routes.map((x) => x.key)
-    expect(keys.filter((k) => k.startsWith('JOB'))).toEqual([`JOB services/x/${JOB_FILE}`])
+    expect(routeKeys(r.stdout).filter((k) => k.startsWith('JOB'))).toEqual([`JOB services/x/${JOB_FILE}`])
   })
 })

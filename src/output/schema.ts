@@ -190,7 +190,7 @@ export const RouteRefSchema = z.object({ key: z.string(), path: z.string() }).st
 export const OutputSchema = z
   .object({
     schemaVersion: z.literal(1),
-    /** What the entry points are: React pages (frontend) or GraphQL operations and REST endpoints (backend). */
+    /** What the entry points are: React pages (frontend) or GraphQL operations, REST endpoints and configured files (backend). */
     surface: z.enum(['frontend', 'backend']),
     /** "revscope" in results written before the project was renamed. */
     tool: z.object({ name: z.enum(['farol', 'revscope']), version: z.string() }).strict(),

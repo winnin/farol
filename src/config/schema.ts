@@ -2,6 +2,10 @@ import { z } from 'zod'
 
 const globs = z.array(z.string().min(1, 'glob patterns cannot be empty'))
 
+/** Kinds of the entry points a TypeScript backend names in `backend.entries`. */
+export const ENTRY_KINDS = ['JOB', 'CONSUMER', 'RPC', 'RUN'] as const
+const entryGlob = z.string().min(1, 'glob patterns cannot be empty').refine((g) => !g.startsWith('!') && !g.split('/').some((seg) => seg === '.' || seg === '..'), 'write a positive glob relative to the project, with no "!", "./" or "../"')
+
 /**
  * Environment, infrastructure and CI files (deploy-time configuration, not code): matched anywhere in the repository,
  * only for files that are not source code.
@@ -88,7 +92,7 @@ export const ConfigSchema = z
       })
       .strict()
       .prefault({}),
-    /** frontend: React routes are the entry points; backend: GraphQL operations and REST endpoints are. */
+    /** frontend: React routes are the entry points; backend: GraphQL operations, REST endpoints and `backend.entries` are. */
     surface: z.enum(['frontend', 'backend']).default('frontend'),
     tsconfig: z.string().min(1).default('tsconfig.json'),
     backend: z
@@ -105,9 +109,10 @@ export const ConfigSchema = z
         context: z.record(z.string().min(1), globs).default({}),
         /**
          * Files that run outside HTTP and GraphQL (Kafka handlers, cron jobs, gRPC services, scripts), by kind. Each
-         * matching file is one entry point, `<KIND> <repo-relative file>`, that runs the code the file uses.
+         * matching file of the TypeScript program is one entry point, `<KIND> <repo-relative file>`, that runs the code
+         * the file uses.
          */
-        entries: z.partialRecord(z.enum(['JOB', 'CONSUMER', 'RPC', 'RUN']), globs).default({}),
+        entries: z.partialRecord(z.enum(ENTRY_KINDS), z.array(entryGlob)).default({}),
       })
       .strict()
       .prefault({}),

@@ -45,6 +45,17 @@ describe('manual test checklist', () => {
     expect(moduleOf(backend, 'RUN src/scripts/seed.ts')).toBe('RUN')
   })
 
+  it('keeps a REST path that ends in a script name under its method and first segment', () => {
+    const backend = { ...golden('05-shared-component'), surface: 'backend' as const }
+    expect(moduleOf(backend, 'GET /static/app.js')).toBe('GET /static')
+    expect(moduleOf(backend, 'api GET /static/app.js')).toBe('api GET')
+  })
+
+  it('reads a file path with a space as one file', () => {
+    const backend = { ...golden('05-shared-component'), surface: 'backend' as const }
+    expect(moduleOf(backend, 'JOB src/my jobs/a.ts')).toBe('JOB')
+  })
+
   it('keeps gRPC methods of a Go service under their service', () => {
     const backend = { ...golden('05-shared-component'), surface: 'backend' as const }
     expect(moduleOf(backend, 'RPC brandspb.Brands/GetBrand')).toBe('RPC /brandspb.Brands')

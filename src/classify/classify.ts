@@ -4,6 +4,7 @@ import { compareStrings, sortedUnique } from '../output/order.js'
 import type { AddedRoute, AffectedRoute, Dependencies, OutputFile, UnresolvedImportOut } from '../output/schema.js'
 import type { ImportGraph, ParseError } from '../project/graph.js'
 import { KEY_SEPARATOR } from '../routes/paths.js'
+import { editedEntryFiles } from './entry-files.js'
 import type { DynamicRoute, RouteEntry, RouteTable } from '../routes/types.js'
 import { checkBarrelAdditive, checkI18nAdditive, compareRouteTables, JsonParseError, losesTokens, unexplainedRemovedLines } from './additive.js'
 import { createReachIndex, reachFrom, routesReaching, type ReachIndex } from './reach.js'
@@ -23,7 +24,7 @@ export interface ClassifyInput {
   /** Modified files that only declare types in base and head (erased at compile time). */
   typeOnlyFiles?: ReadonlySet<string>
   /** Backend only: impact of each changed schema or resolver file (Go/Python: of every source file). */
-  backend?: { impacts: ReadonlyMap<string, BackendFileImpact> }
+  backend?: { impacts: ReadonlyMap<string, BackendFileImpact>; configEntries?: ReadonlyMap<string, string> }
   /** TypeScript: declaration-level impact of changed source files (precise reach instead of the file graph). */
   declImpacts?: ReadonlyMap<string, BackendFileImpact>
   /** Dependency diff of every changed manifest (or why it could not be read). */
@@ -330,6 +331,13 @@ export function classify(input: ClassifyInput): ClassifyResult {
     if (!target.reportModified) continue
     if (hits.length > 0) reasons.push(reason('existing-file-modified', `reached by ${hits.length} existing route(s): ${describeHits(hits)}`, target.path))
     else reasons.push(reason('existing-file-unreachable', nodes.has(target.path) ? 'modified, and no route reaches it' : 'modified, and it is not part of the import graph', target.path))
+  }
+
+  // A file named as an entry point runs whole when that entry point runs: no edit of it is additive.
+  for (const { route, file } of editedEntryFiles(input.backend?.configEntries ?? new Map<string, string>(), outputFiles, existingRoutes)) {
+    affected.add(route, file.path, [file.path])
+    if (file.additive) file.additive = false
+    if (!reasons.some((r) => r.file === file.path && r.code === 'existing-file-modified')) reasons.push(reason('existing-file-modified', `the file of entry point ${route.key}`, file.path))
   }
 
   for (const file of newFiles) {

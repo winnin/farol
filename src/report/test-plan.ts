@@ -1,5 +1,6 @@
 import { posix } from 'node:path'
 import { isScriptFile } from '../classify/declarations-only.js'
+import { ENTRY_KINDS } from '../config/schema.js'
 import { compareStrings } from '../output/order.js'
 import type { Output } from '../output/schema.js'
 import { mergeScore, scoreGroups } from './merge-score.js'
@@ -27,12 +28,14 @@ export interface TestGroup {
 export function moduleOf(o: Output, path: string): string {
   if (o.surface === 'backend') {
     const parts = path.split(' ')
+    // `JOB src/jobs/a.ts`: an entry point named by its file belongs to its kind. A file name can hold spaces.
+    const kind = parts[0] ?? ''
+    const rest = path.slice(kind.length + 1)
+    if ((ENTRY_KINDS as readonly string[]).includes(kind) && !rest.startsWith('/') && isScriptFile(rest)) return kind
     if (parts.length >= 3) return `${parts[0] ?? ''} ${parts[1] ?? ''}`
     if (parts.length === 2) {
       const first = (parts[1] ?? '').split('/').filter((s) => s !== '')[0]
-      // `RUN seed.py`, `JOB src/jobs/a.ts`: an entry point named by its file belongs to its kind.
-      const namedByFile = parts[0] === 'RUN' || isScriptFile(parts[1] ?? '')
-      return namedByFile ? (parts[0] ?? '') : `${parts[0] ?? ''} /${first ?? ''}`
+      return parts[0] === 'RUN' ? 'RUN' : `${parts[0] ?? ''} /${first ?? ''}`
     }
     return path.split('.')[0] ?? path
   }

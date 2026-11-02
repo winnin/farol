@@ -79,7 +79,11 @@ export async function backendImpacts(
   const baseRest = table.restKeysWithout(new Set(addedMounts.map((m) => m.id)), addedAnchors)
   const addedFiles = new Set(files.filter((f) => f.status === 'added').map((f) => f.path))
   // An entry point named in the configuration is new only with its file: a renamed file stays an existing one.
-  const inBase = (r: RouteEntry): boolean => (r.entry !== null ? !addedFiles.has(r.entry) : r.key.includes(' ') ? baseRest.has(r.key) : !addedOperations.has(r.key))
+  const inBase = (r: RouteEntry): boolean => {
+    const file = table.configEntries.get(r.key)
+    if (file !== undefined) return !addedFiles.has(file)
+    return r.key.includes(' ') ? baseRest.has(r.key) : !addedOperations.has(r.key)
+  }
   const baseRoutes = table.operations.filter(inBase)
   return { impacts: mountImpacts(table, addedMounts, baseRest, duplicateEndpoints(impacts, baseRest)), baseRoutes: { routes: baseRoutes, dynamic: [], sources: [] }, contracts: await schemaContracts(ctx, table, files, baseSha) }
 }
