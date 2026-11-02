@@ -71,6 +71,25 @@ describe('Hono middleware placement', () => {
     expect(table({ ...base, 'src/main.ts': app(`export function install(opt: unknown) {\n  ${body}\n}`) }).dynamic).toEqual([])
   })
 
+  it('a function held in an object property keeps the mount above the app it receives', () => {
+    const t = table({
+      'src/main.ts': "import { Hono } from 'hono'\nimport { routes } from './routes'\nexport const app = new Hono()\nconst api = new Hono()\napp.route('/api', api)\nroutes.register(api)\n",
+      'src/routes.ts': "import type { Hono } from 'hono'\nexport const routes = {\n  register: (app: Hono) => {\n    app.get('/users', (c) => c.text('u'))\n  },\n}\n",
+    })
+    expect(t.operations.map((o) => o.key)).toEqual(['GET /api/users'])
+    expect(t.dynamic).toEqual([])
+  })
+
+  it('a file that gets its app from a factory through a barrel holds that app', () => {
+    const t = table({
+      'src/main.ts': "import { createApp } from './barrel'\nexport const app = createApp({ a: 1 })\n",
+      'src/barrel.ts': "export { createApp } from './factory'\n",
+      'src/factory.ts': "import { Hono } from 'hono'\nexport function createApp(_o: unknown): Hono {\n  const app = new Hono()\n  app.get('/x', (c) => c.text('x'))\n  return app\n}\n",
+    })
+    expect(t.fileHoldsApp('src/main.ts')).toBe(true)
+    expect(t.fileHoldsApp('src/barrel.ts')).toBe(false)
+  })
+
   it('an imported function called on its module keeps the mount above the app it receives', () => {
     const files = {
       'src/main.ts': "import { Hono } from 'hono'\nimport * as routes from './routes'\nexport const app = new Hono()\nconst api = new Hono()\napp.route('/api', api)\nroutes.register(api)\n",

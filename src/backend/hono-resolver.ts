@@ -66,7 +66,8 @@ export function appResolver(checker: ts.TypeChecker) {
     const d = ts.isIdentifier(e) ? declOf(e) : ts.isPropertyAccessExpression(e) ? declOf(e.name) : undefined
     if (!d || d.getSourceFile().isDeclarationFile) return undefined
     if (ts.isFunctionDeclaration(d) || ts.isMethodDeclaration(d)) return d
-    const init = ts.isVariableDeclaration(d) && d.initializer ? unwrap(d.initializer) : undefined
+    const value = ts.isVariableDeclaration(d) ? d.initializer : ts.isPropertyAssignment(d) ? d.initializer : undefined
+    const init = value ? unwrap(value) : undefined
     return init && (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) ? init : undefined
   }
   const appOf = (expr: ts.Expression, seen = new Set<ts.Node>()): App | undefined => {

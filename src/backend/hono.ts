@@ -191,7 +191,8 @@ function readApps(files: readonly ts.SourceFile[], honoFiles: ReadonlySet<ts.Sou
   for (const sf of files) {
     for (const m of mountNodes(sf, rel(sf.fileName))) mount(m)
     const visit = (node: ts.Node): void => {
-      if (honoFiles.has(sf) && (ts.isNewExpression(node) || (ts.isVariableDeclaration(node) && node.initializer))) {
+      // A file with no hono import can get an app from a factory through a barrel.
+      if ((honoFiles.has(sf) && ts.isNewExpression(node)) || (ts.isVariableDeclaration(node) && node.initializer)) {
         const app = r.appOf(ts.isNewExpression(node) ? node : (node.initializer as ts.Expression))
         if (app) recordApp(node, app)
       }

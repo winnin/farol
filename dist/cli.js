@@ -248980,7 +248980,8 @@ function appResolver(checker) {
     const d = import_typescript10.default.isIdentifier(e) ? declOf(e) : import_typescript10.default.isPropertyAccessExpression(e) ? declOf(e.name) : void 0;
     if (!d || d.getSourceFile().isDeclarationFile) return void 0;
     if (import_typescript10.default.isFunctionDeclaration(d) || import_typescript10.default.isMethodDeclaration(d)) return d;
-    const init = import_typescript10.default.isVariableDeclaration(d) && d.initializer ? unwrap(d.initializer) : void 0;
+    const value = import_typescript10.default.isVariableDeclaration(d) ? d.initializer : import_typescript10.default.isPropertyAssignment(d) ? d.initializer : void 0;
+    const init = value ? unwrap(value) : void 0;
     return init && (import_typescript10.default.isArrowFunction(init) || import_typescript10.default.isFunctionExpression(init)) ? init : void 0;
   };
   const appOf = (expr, seen = /* @__PURE__ */ new Set()) => {
@@ -249128,7 +249129,7 @@ function readApps(files, honoFiles, r, rel) {
   for (const sf of files) {
     for (const m of mountNodes(sf, rel(sf.fileName))) mount(m);
     const visit3 = (node2) => {
-      if (honoFiles.has(sf) && (import_typescript11.default.isNewExpression(node2) || import_typescript11.default.isVariableDeclaration(node2) && node2.initializer)) {
+      if (honoFiles.has(sf) && import_typescript11.default.isNewExpression(node2) || import_typescript11.default.isVariableDeclaration(node2) && node2.initializer) {
         const app = r.appOf(import_typescript11.default.isNewExpression(node2) ? node2 : node2.initializer);
         if (app) recordApp(node2, app);
       }
