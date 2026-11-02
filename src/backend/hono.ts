@@ -155,8 +155,12 @@ function readApps(files: readonly ts.SourceFile[], honoFiles: ReadonlySet<ts.Sou
   const argumentEdges = (call: ts.CallExpression): void => {
     const fn = r.functionOf(call.expression)
     call.arguments.forEach((arg, i) => {
+      if (ts.isSpreadElement(arg)) {
+        if (fn?.parameters.slice(i).some(r.isHonoParam)) at(arg, 'Hono app is spread into a function: farol cannot follow it')
+        return
+      }
       const p = fn?.parameters[i]
-      if (!p || ts.isSpreadElement(arg)) return
+      if (!p) return
       const from = r.appOf(arg)
       if (r.isHonoParam(p)) {
         if (!from) at(arg, 'Hono app passed to a function is not one farol can follow')

@@ -248828,11 +248828,11 @@ function installsOnApp(call) {
 function registrationReader(r) {
   const namedNext = (call) => {
     const last = call.arguments[call.arguments.length - 1];
-    if (!last || call.expression.name.text !== "all" && !isWidePath(literal2(call.arguments[0]) ?? "*")) return false;
+    if (!last) return false;
     const x = unwrap(last);
     if (import_typescript8.default.isArrowFunction(x) || import_typescript8.default.isFunctionExpression(x)) return false;
     const fn = r.functionOf(last);
-    return fn ? hasNextParameter(fn) : true;
+    return fn ? hasNextParameter(fn) : call.expression.name.text === "all" || isWidePath(literal2(call.arguments[0]) ?? "*");
   };
   const registrationOf = (call) => {
     const name = call.expression.name.text;
@@ -248848,6 +248848,7 @@ function registrationReader(r) {
     seen.add(x);
     if (x.kind === import_typescript8.default.SyntaxKind.ThisKeyword) return true;
     if (import_typescript8.default.isPropertyAccessExpression(x) || import_typescript8.default.isElementAccessExpression(x) || import_typescript8.default.isCallExpression(x)) return unknownCode(x.expression, seen);
+    if (import_typescript8.default.isArrayLiteralExpression(x)) return x.elements.some((e) => unknownCode(e, seen));
     if (!import_typescript8.default.isIdentifier(x)) return false;
     let decl = r.declOf(x);
     while (decl && import_typescript8.default.isBindingElement(decl)) decl = decl.parent.parent;
@@ -249022,8 +249023,12 @@ function readApps(files, honoFiles, r, rel) {
   const argumentEdges = (call) => {
     const fn = r.functionOf(call.expression);
     call.arguments.forEach((arg, i) => {
+      if (import_typescript10.default.isSpreadElement(arg)) {
+        if (fn?.parameters.slice(i).some(r.isHonoParam)) at(arg, "Hono app is spread into a function: farol cannot follow it");
+        return;
+      }
       const p = fn?.parameters[i];
-      if (!p || import_typescript10.default.isSpreadElement(arg)) return;
+      if (!p) return;
       const from = r.appOf(arg);
       if (r.isHonoParam(p)) {
         if (!from) at(arg, "Hono app passed to a function is not one farol can follow");

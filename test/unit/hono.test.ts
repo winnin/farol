@@ -244,6 +244,13 @@ export function register(app: H<{ Bindings: {} }>) {
     expect(diff(`${base}ping.get('/pong', (c) => c.text('ping'))\n`).problems).toEqual([])
   })
 
+  it.each([
+    ['a parameter held in an array and spread into use()', "import { Hono } from 'hono'\nexport const app = new Hono()\nexport function install(guard: never) {\n  const mws = [guard]\n  app.use('*', ...mws)\n}\n", 'parameter'],
+    ['an app spread into a parameter typed Hono', "import { Hono } from 'hono'\nconst api = new Hono()\nfunction register(app: Hono) {\n  app.get('/users', (c) => c.text('u'))\n}\nconst root = new Hono()\nroot.route('/api', api)\nregister(...[api] as const)\nexport { root }\n", 'spread'],
+  ])('%s is a dynamic route', (_name, code, word) => {
+    expect(dynamic({ 'src/main.ts': code }).join()).toContain(word)
+  })
+
   it('a new enum resolver is not reported as empty load code', () => {
     const types = new Map([['Status', new Set(['__values'])]])
     const diff = diffResolvers(resolverEntries('src/a.ts', 'export const r = { other: 1 }', types), resolverEntries('src/a.ts', 'export const r = { other: 1, Status: build() }', types))

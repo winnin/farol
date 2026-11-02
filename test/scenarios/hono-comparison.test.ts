@@ -123,6 +123,17 @@ describe('what makes a file hold an app', () => {
   })
 })
 
+describe('a named handler that takes next on a path with a parameter', () => {
+  it('an edit of its module lists the endpoints under its path', async () => {
+    const GUARD = 'src/http/middleware/param-guard.ts'
+    await expectAffected(['GET /p/:id', 'GET /p/health'], (repo) => { edit(repo, GUARD, "'before'", "'after'") }, (repo) => {
+      repo.write(GUARD, "export async function paramGuard(c: { header: (a: string, b: string) => void }, next: () => Promise<void>) {\n  c.header('x', 'before')\n  await next()\n}\n")
+      edit(repo, INDEX, "import { serveFiles }", "import { paramGuard } from '../middleware/param-guard'\nimport { serveFiles }")
+      edit(repo, INDEX, "  app.get('/files', (c)", "  app.get('/p/:id', paramGuard)\n  app.get('/p/health', (c) => c.text('h'))\n  app.get('/files', (c)")
+    })
+  })
+})
+
 describe('new code in a file with handlers', () => {
   it('a new bare require() runs that module, like a side-effect import', async () => {
     const o = await analyze((repo) => { edit(repo, PUBLIC, 'export function createPublicRoutes', "require('./install')\n\nexport function createPublicRoutes") }, (repo) => { repo.write('src/http/routes/install.ts', 'export const ready = true\n') })

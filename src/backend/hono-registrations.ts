@@ -13,14 +13,14 @@ export function installsOnApp(call: AppCall): boolean {
 
 /** How a call installs code on an app, and whether farol can find a middleware argument's code. */
 export function registrationReader(r: AppResolver) {
-  // A named handler on `all` or a `*` path is middleware when its function takes `next`, or when farol cannot find it.
+  // A named handler is middleware when its function takes `next`; one farol cannot find is, on `all` or a wide path.
   const namedNext = (call: AppCall): boolean => {
     const last = call.arguments[call.arguments.length - 1]
-    if (!last || (call.expression.name.text !== 'all' && !isWidePath(literal(call.arguments[0]) ?? '*'))) return false
+    if (!last) return false
     const x = unwrap(last)
     if (ts.isArrowFunction(x) || ts.isFunctionExpression(x)) return false
     const fn = r.functionOf(last)
-    return fn ? hasNextParameter(fn) : true
+    return fn ? hasNextParameter(fn) : call.expression.name.text === 'all' || isWidePath(literal(call.arguments[0]) ?? '*')
   }
   /** Path and code of a call that installs code on its app; a path farol cannot read covers the whole app. */
   const registrationOf = (call: AppCall): { path: string; args: ts.Expression[] } | undefined => {
@@ -38,6 +38,7 @@ export function registrationReader(r: AppResolver) {
     seen.add(x)
     if (x.kind === ts.SyntaxKind.ThisKeyword) return true
     if (ts.isPropertyAccessExpression(x) || ts.isElementAccessExpression(x) || ts.isCallExpression(x)) return unknownCode(x.expression, seen)
+    if (ts.isArrayLiteralExpression(x)) return x.elements.some((e) => unknownCode(e, seen))
     if (!ts.isIdentifier(x)) return false
     let decl: ts.Node | undefined = r.declOf(x)
     while (decl && ts.isBindingElement(decl)) decl = decl.parent.parent
