@@ -102,7 +102,7 @@ describe('backend entry points', () => {
     expect(() => parseConfig(JSON.stringify({ surface: 'backend', backend: { entries: { JOB: [glob] } } }), 'c')).toThrow(/relative to the project/)
   })
 
-  it.each(['!(top).ts', 'src/{a,b}/*.ts', 'src/.hidden/*.ts', 'src{/,/jobs/}*.ts', '{src,lib}/{a,/b}.ts'])('accepts the glob %s', (glob) => {
+  it.each(['!(top).ts', 'src/{a,b}/*.ts', 'src/.hidden/*.ts', 'src{/,/jobs/}*.ts', '{src,lib}/{a,/b}.ts', 'src{,/legacy}/*.ts'])('accepts the glob %s', (glob) => {
     const config = parseConfig(JSON.stringify({ surface: 'backend', backend: { entries: { JOB: [glob] } } }), 'c')
     expect(config.backend.entries.JOB).toEqual([glob])
   })

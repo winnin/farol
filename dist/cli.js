@@ -238078,6 +238078,10 @@ function classify(input2) {
       if (out.additive) reasons.push(reason("routes-additive", "every existing route is unchanged and no line was removed", file2.path));
       continue;
     }
+    if (input2.typeOnlyFiles?.has(file2.path)) {
+      reasons.push(reason("type-only-change", "the file only declares types in both versions: nothing changes at runtime", file2.path));
+      continue;
+    }
     if (role === "barrel" || role === "i18n") {
       const baseText = input2.baseText.get(file2.path);
       const headText = input2.headText.get(file2.path);
@@ -238102,10 +238106,6 @@ function classify(input2) {
       out.additive = additive;
       if (additive) reasons.push(reason(role === "barrel" ? "barrel-additive" : "i18n-additive", role === "barrel" ? "only new export declarations" : "only new keys", file2.path));
       else reachTargets.push({ path: file2.path, reportModified: false });
-      continue;
-    }
-    if (input2.typeOnlyFiles?.has(file2.path)) {
-      reasons.push(reason("type-only-change", "the file only declares types in both versions: nothing changes at runtime", file2.path));
       continue;
     }
     reachTargets.push({ path: file2.path, reportModified: true });
