@@ -197,7 +197,8 @@ function namesOnlyInlineTypes(s: ts.ExportDeclaration): boolean {
  * Under `options` that keep inline type statements, only `import type` and `export type` statements are erased.
  */
 export function isTypeOnlyModule(file: string, code: string, options: ts.CompilerOptions): boolean {
-  const keeps = keepsInlineTypeStatements(options)
+  // A declaration file emits nothing, whatever the options.
+  const keeps = keepsInlineTypeStatements(options) && !/\.d\.[mc]?ts$/.test(file)
   if (!TS_FILE.test(file)) return false
   const { sourceFile: sf, errors } = parseIsolated(file, code)
   if (errors.length > 0) return false
@@ -206,7 +207,8 @@ export function isTypeOnlyModule(file: string, code: string, options: ts.Compile
     // Bindings imported into a file that only declares types can only be used in type positions: erased. A side-effect
     // import (`import './x'`) runs code, so it does not count.
     if (ts.isImportDeclaration(s)) return s.importClause !== undefined && (!keeps || isTypeOnlyImport(s.importClause))
-    if (ts.isExportDeclaration(s)) return s.isTypeOnly || (!keeps && namesOnlyInlineTypes(s))
+    // A local `export { type A }` loads no module, so only a re-export with `from` is kept.
+    if (ts.isExportDeclaration(s)) return s.isTypeOnly || ((!keeps || s.moduleSpecifier === undefined) && namesOnlyInlineTypes(s))
     const modifiers = ts.canHaveModifiers(s) ? (ts.getModifiers(s) ?? []) : []
     return modifiers.some((m) => m.kind === ts.SyntaxKind.DeclareKeyword) && !ts.isEnumDeclaration(s) && !ts.isVariableStatement(s)
   })

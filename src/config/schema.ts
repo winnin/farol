@@ -1,9 +1,31 @@
 import { z } from 'zod'
 
 const glob = z.string().min(1, 'glob patterns cannot be empty')
-/** A leading "/", also as a brace alternative (`{a,/b}`): changed files have relative paths, so it never matches. */
-const ROOTED = /(^|[{,])\//
-const pathGlob = glob.refine((g) => !ROOTED.test(g), 'write the glob relative to the project or repository, with no leading "/"')
+/**
+ * Whether a brace expansion of the glob starts with "/" (`/a`, `{a,/b}`, `{,x}/a`). Changed files have relative paths,
+ * so such a glob never matches. Only a group at the start counts: text before a brace is a prefix (`src{/,/a/}*.ts`).
+ */
+function isRooted(g: string): boolean {
+  if (g.startsWith('/')) return true
+  if (!g.startsWith('{')) return false
+  const alternatives: string[] = []
+  let depth = 0
+  let start = 1
+  for (let i = 0; i < g.length; i++) {
+    const c = g[i]
+    if (c === '\\') i++
+    else if (c === '{') depth++
+    else if (c === ',' && depth === 1) {
+      alternatives.push(g.slice(start, i))
+      start = i + 1
+    } else if (c === '}' && --depth === 0) {
+      alternatives.push(g.slice(start, i))
+      return alternatives.some((a) => isRooted(a + g.slice(i + 1)))
+    }
+  }
+  return false // an unclosed "{" is a literal character
+}
+const pathGlob = glob.refine((g) => !isRooted(g), 'write the glob relative to the project or repository, with no leading "/"')
 const globs = z.array(pathGlob)
 
 /** Kinds of the entry points a TypeScript backend names in `backend.entries`. */

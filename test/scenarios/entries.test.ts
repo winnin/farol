@@ -157,6 +157,8 @@ describe('entry points named in backend.entries', () => {
 
     const reexports: [string, string, string] = ['src/jobs/index.ts', "export { type A } from './a'\nexport { type B } from './b'\n", "export { type A } from './a'\n"]
     const imports: [string, string, string] = ['src/jobs/port.ts', "import { type A } from './a'\nimport { type B } from './b'\nexport type { A, B }\n", "import { type A } from './a'\nexport type { A }\n"]
+    const localTypes: [string, string, string] = ['src/jobs/port.ts', 'type A = number\ntype B = string\nexport { type A, type B }\n', 'type A = number\nexport { type A }\n']
+    const declaration: [string, string, string] = ['src/jobs/port.d.ts', "import { A } from './a'\nexport interface P { a: A; b: string }\n", "import { A } from './a'\nexport interface P { a: A }\n"]
     const typeOnly: [string, string, string] = ['src/jobs/index.ts', "export type { A } from './a'\nexport type { B } from './b'\n", "export type { A } from './a'\n"]
     it.each([
       ['runs the module of an inline type re-export under verbatimModuleSyntax', reexports, { verbatimModuleSyntax: true }, 'touches-existing'],
@@ -165,6 +167,8 @@ describe('entry points named in backend.entries', () => {
       ['erases an inline type import otherwise', imports, {}, 'isolated'],
       ['runs the module of an inline type import under importsNotUsedAsValues "preserve"', imports, { importsNotUsedAsValues: 'preserve' }, 'touches-existing'],
       ['changes nothing at runtime when the file is a barrel of types only', typeOnly, {}, 'isolated'],
+      ['erases a local inline type export under verbatimModuleSyntax', localTypes, { verbatimModuleSyntax: true }, 'isolated'],
+      ['erases the imports of a declaration file under verbatimModuleSyntax', declaration, { verbatimModuleSyntax: true }, 'isolated'],
     ])('%s', async (_name, [file, before, after], compilerOptions, classification) => {
       const o = await pr((repo) => { repo.write(file, before) }, (repo) => {
         entries({ JOB: [file] })(repo)

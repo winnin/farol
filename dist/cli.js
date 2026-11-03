@@ -236449,8 +236449,27 @@ function date4(params) {
 
 // src/config/schema.ts
 var glob = external_exports.string().min(1, "glob patterns cannot be empty");
-var ROOTED = /(^|[{,])\//;
-var pathGlob = glob.refine((g) => !ROOTED.test(g), 'write the glob relative to the project or repository, with no leading "/"');
+function isRooted(g) {
+  if (g.startsWith("/")) return true;
+  if (!g.startsWith("{")) return false;
+  const alternatives = [];
+  let depth = 0;
+  let start = 1;
+  for (let i = 0; i < g.length; i++) {
+    const c = g[i];
+    if (c === "\\") i++;
+    else if (c === "{") depth++;
+    else if (c === "," && depth === 1) {
+      alternatives.push(g.slice(start, i));
+      start = i + 1;
+    } else if (c === "}" && --depth === 0) {
+      alternatives.push(g.slice(start, i));
+      return alternatives.some((a) => isRooted(a + g.slice(i + 1)));
+    }
+  }
+  return false;
+}
+var pathGlob = glob.refine((g) => !isRooted(g), 'write the glob relative to the project or repository, with no leading "/"');
 var globs = external_exports.array(pathGlob);
 var ENTRY_KINDS = ["JOB", "CONSUMER", "RPC", "RUN"];
 var isPositive = (g) => !g.startsWith("!") || g.startsWith("!(");
@@ -237493,14 +237512,14 @@ function namesOnlyInlineTypes(s) {
   return s.exportClause !== void 0 && import_typescript2.default.isNamedExports(s.exportClause) && s.exportClause.elements.every((e) => e.isTypeOnly);
 }
 function isTypeOnlyModule(file2, code2, options) {
-  const keeps = keepsInlineTypeStatements(options);
+  const keeps = keepsInlineTypeStatements(options) && !/\.d\.[mc]?ts$/.test(file2);
   if (!TS_FILE.test(file2)) return false;
   const { sourceFile: sf, errors } = parseIsolated(file2, code2);
   if (errors.length > 0) return false;
   return sf.statements.every((s) => {
     if (import_typescript2.default.isInterfaceDeclaration(s) || import_typescript2.default.isTypeAliasDeclaration(s)) return true;
     if (import_typescript2.default.isImportDeclaration(s)) return s.importClause !== void 0 && (!keeps || isTypeOnlyImport(s.importClause));
-    if (import_typescript2.default.isExportDeclaration(s)) return s.isTypeOnly || !keeps && namesOnlyInlineTypes(s);
+    if (import_typescript2.default.isExportDeclaration(s)) return s.isTypeOnly || (!keeps || s.moduleSpecifier === void 0) && namesOnlyInlineTypes(s);
     const modifiers = import_typescript2.default.canHaveModifiers(s) ? import_typescript2.default.getModifiers(s) ?? [] : [];
     return modifiers.some((m) => m.kind === import_typescript2.default.SyntaxKind.DeclareKeyword) && !import_typescript2.default.isEnumDeclaration(s) && !import_typescript2.default.isVariableStatement(s);
   });
