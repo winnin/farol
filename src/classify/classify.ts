@@ -292,6 +292,11 @@ export function classify(input: ClassifyInput): ClassifyResult {
       if (out.additive) reasons.push(reason('routes-additive', 'every existing route is unchanged and no line was removed', file.path))
       continue
     }
+    // Before the barrel rule: a barrel named as an entry point can also be a file of types only.
+    if (input.typeOnlyFiles?.has(file.path)) {
+      reasons.push(reason('type-only-change', 'the file only declares types in both versions: nothing changes at runtime', file.path))
+      continue
+    }
     if (role === 'barrel' || role === 'i18n') {
       const baseText = input.baseText.get(file.path)
       const headText = input.headText.get(file.path)
@@ -316,10 +321,6 @@ export function classify(input: ClassifyInput): ClassifyResult {
       out.additive = additive
       if (additive) reasons.push(reason(role === 'barrel' ? 'barrel-additive' : 'i18n-additive', role === 'barrel' ? 'only new export declarations' : 'only new keys', file.path))
       else reachTargets.push({ path: file.path, reportModified: false })
-      continue
-    }
-    if (input.typeOnlyFiles?.has(file.path)) {
-      reasons.push(reason('type-only-change', 'the file only declares types in both versions: nothing changes at runtime', file.path))
       continue
     }
     reachTargets.push({ path: file.path, reportModified: true })

@@ -1,6 +1,6 @@
 import ts from 'typescript'
 import { isDeepStrictEqual } from 'node:util'
-import { codeTokens, parseIsolated } from '../project/parse.js'
+import { codeTokens, isTypeOnlyImport, keepsInlineTypeStatements, parseIsolated, TS_FILE } from '../project/parse.js'
 import type { RouteEntry, RouteTable } from '../routes/types.js'
 
 export interface AdditiveResult {
@@ -186,20 +186,29 @@ export function checkI18nAdditive(baseText: string, headText: string): AdditiveR
   return { additive: problems.length === 0, problems }
 }
 
+/** `export { type A, type B } from …` */
+function namesOnlyInlineTypes(s: ts.ExportDeclaration): boolean {
+  return s.exportClause !== undefined && ts.isNamedExports(s.exportClause) && s.exportClause.elements.every((e) => e.isTypeOnly)
+}
+
 /**
  * Whether a TS file only declares types (interfaces, type aliases, type-only imports/exports, ambient declarations):
  * emitters erase all of it, so changing it cannot change runtime behavior. Enums and namespaces with values do not count.
+ * Under `options` that keep inline type statements, only `import type` and `export type` statements are erased.
  */
-export function isTypeOnlyModule(file: string, code: string): boolean {
-  if (!/\.(ts|tsx|mts|cts)$/.test(file)) return false
+export function isTypeOnlyModule(file: string, code: string, options: ts.CompilerOptions): boolean {
+  if (!TS_FILE.test(file)) return false
   const { sourceFile: sf, errors } = parseIsolated(file, code)
   if (errors.length > 0) return false
+  // A declaration file emits nothing, whatever the options.
+  const keeps = keepsInlineTypeStatements(options) && !sf.isDeclarationFile
   return sf.statements.every((s) => {
     if (ts.isInterfaceDeclaration(s) || ts.isTypeAliasDeclaration(s)) return true
     // Bindings imported into a file that only declares types can only be used in type positions: erased. A side-effect
     // import (`import './x'`) runs code, so it does not count.
-    if (ts.isImportDeclaration(s)) return s.importClause !== undefined
-    if (ts.isExportDeclaration(s)) return s.isTypeOnly || (s.exportClause !== undefined && ts.isNamedExports(s.exportClause) && s.exportClause.elements.every((e) => e.isTypeOnly))
+    if (ts.isImportDeclaration(s)) return s.importClause !== undefined && (!keeps || isTypeOnlyImport(s.importClause))
+    // A local `export { type A }` loads no module, so only a re-export with `from` is kept.
+    if (ts.isExportDeclaration(s)) return s.isTypeOnly || ((!keeps || s.moduleSpecifier === undefined) && namesOnlyInlineTypes(s))
     const modifiers = ts.canHaveModifiers(s) ? (ts.getModifiers(s) ?? []) : []
     return modifiers.some((m) => m.kind === ts.SyntaxKind.DeclareKeyword) && !ts.isEnumDeclaration(s) && !ts.isVariableStatement(s)
   })

@@ -154,6 +154,52 @@ describe('entry points named in backend.entries', () => {
       expect(codes(o)).toContain('type-only-change')
       expect(o.routes.affected).toEqual([])
     })
+
+    const reexports: [string, string, string] = ['src/jobs/index.ts', "export { type A } from './a'\nexport { type B } from './b'\n", "export { type A } from './a'\n"]
+    const imports: [string, string, string] = ['src/jobs/port.ts', "import { type A } from './a'\nimport { type B } from './b'\nexport type { A, B }\n", "import { type A } from './a'\nexport type { A }\n"]
+    const typeImports: [string, string, string] = ['src/jobs/index.ts', "export type { A } from './a'\n", "import { type B } from './b'\nexport type { A } from './a'\nexport type { B }\n"]
+    const localTypes: [string, string, string] = ['src/jobs/port.ts', 'type A = number\ntype B = string\nexport { type A, type B }\n', 'type A = number\nexport { type A }\n']
+    const declaration: [string, string, string] = ['src/jobs/port.d.ts', "import { A } from './a'\nexport interface P { a: A; b: string }\n", "import { A } from './a'\nexport interface P { a: A }\n"]
+    const typeOnly: [string, string, string] = ['src/jobs/index.ts', "export type { A } from './a'\nexport type { B } from './b'\n", "export type { A } from './a'\n"]
+    it.each([
+      ['runs the module of an inline type re-export under verbatimModuleSyntax', reexports, { verbatimModuleSyntax: true }, 'touches-existing'],
+      ['erases an inline type re-export otherwise', reexports, {}, 'isolated'],
+      ['runs the module of an inline type import under verbatimModuleSyntax', imports, { verbatimModuleSyntax: true }, 'touches-existing'],
+      ['erases an inline type import otherwise', imports, {}, 'isolated'],
+      ['runs the module of an inline type import under importsNotUsedAsValues "preserve"', imports, { importsNotUsedAsValues: 'preserve' }, 'touches-existing'],
+      ['changes nothing at runtime when the file is a barrel of types only', typeOnly, {}, 'isolated'],
+      ['changes nothing at runtime when a barrel of types only gains an inline type import', typeImports, {}, 'isolated'],
+      ['erases a local inline type export under verbatimModuleSyntax', localTypes, { verbatimModuleSyntax: true }, 'isolated'],
+      ['erases the imports of a declaration file under verbatimModuleSyntax', declaration, { verbatimModuleSyntax: true }, 'isolated'],
+      ['erases the imports of a declaration file of another extension under verbatimModuleSyntax', [declaration[0].replace('.d.ts', '.d.css.ts'), declaration[1], declaration[2]], { verbatimModuleSyntax: true, allowArbitraryExtensions: true }, 'isolated'],
+    ])('%s', async (_name, [file, before, after], compilerOptions, classification) => {
+      const o = await pr((repo) => { repo.write(file, before) }, (repo) => {
+        entries({ JOB: [file] })(repo)
+        repo.write('tsconfig.json', JSON.stringify({ compilerOptions: { module: 'esnext', moduleResolution: 'bundler', ...compilerOptions }, include: ['src'] }))
+        repo.write('src/jobs/a.ts', 'export type A = number\n')
+        repo.write('src/jobs/b.ts', 'export type B = number\n')
+        repo.write(file, after)
+      })
+      expect(o.classification).toBe(classification)
+      if (classification === 'isolated') expect(o.routes.affected).toEqual([])
+    })
+
+    it.each([
+      ['an inline type import runs its module under verbatimModuleSyntax', "import { type T } from '../lib/side'\n", { verbatimModuleSyntax: true }, [JOB]],
+      ['an inline type re-export runs its module under verbatimModuleSyntax', "export { type T } from '../lib/side'\n", { verbatimModuleSyntax: true }, [JOB]],
+      ['an inline type import runs its module under importsNotUsedAsValues "preserve"', "import { type T } from '../lib/side'\n", { importsNotUsedAsValues: 'preserve' }, [JOB]],
+      ['an inline type import is erased otherwise', "import { type T } from '../lib/side'\n", {}, []],
+      ['an inline type re-export is erased otherwise', "export { type T } from '../lib/side'\n", {}, []],
+    ])('%s', async (_name, statement, compilerOptions, affected) => {
+      const SIDE = 'src/lib/side.ts'
+      const o = await pr((repo) => { repo.write(SIDE, "export type T = number\nconsole.log('loaded')\n") }, (repo) => {
+        repo.write('farol.config.json', CONFIG)
+        repo.write('tsconfig.json', JSON.stringify({ compilerOptions: { module: 'esnext', moduleResolution: 'bundler', ...compilerOptions }, include: ['src'] }))
+        repo.write(SIDE, 'export type T = number\n')
+        repo.write(JOB_FILE, job('', statement))
+      })
+      expect(o.routes.affected.map((r) => r.key)).toEqual(affected)
+    })
   })
 
   describe('what a job runs', () => {

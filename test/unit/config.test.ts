@@ -98,17 +98,33 @@ describe('backend entry points', () => {
     expect(() => parseConfig(`{${rest},"backend":{"entries":{"JOB":["a.ts"]}}}`, 'c')).toThrow(/backend\.entries/)
   })
 
-  it.each(['../shared/jobs/*.ts', 'src/../jobs/*.ts', './src/jobs/*.ts', '!src/jobs/legacy.ts', 'src/{../x,a}/*.ts', '{./src/a/*.ts,src/b/*.ts}'])('rejects the glob %s, which would not match as written', (glob) => {
+  it.each(['../shared/jobs/*.ts', 'src/../jobs/*.ts', './src/jobs/*.ts', '!src/jobs/legacy.ts', 'src/{../x,a}/*.ts', '{./src/a/*.ts,src/b/*.ts}', '/src/jobs/*.ts', '{/src/a/*.ts,src/b/*.ts}', '{,}/src/jobs/*.ts', '{,src}/jobs/*.ts', '{{a,/b},c}/*.ts', '\\/src/jobs/*.ts'])('rejects the glob %s, which would not match as written', (glob) => {
     expect(() => parseConfig(JSON.stringify({ surface: 'backend', backend: { entries: { JOB: [glob] } } }), 'c')).toThrow(/relative to the project/)
   })
 
-  it.each(['!(top).ts', 'src/{a,b}/*.ts', 'src/.hidden/*.ts'])('accepts the glob %s', (glob) => {
+  it.each(['!(top).ts', 'src/{a,b}/*.ts', 'src/.hidden/*.ts', 'src{/,/jobs/}*.ts', '{src,lib}/{a,/b}.ts', 'src{,/legacy}/*.ts', '{/a}.ts', '{}/a.ts'])('accepts the glob %s', (glob) => {
     const config = parseConfig(JSON.stringify({ surface: 'backend', backend: { entries: { JOB: [glob] } } }), 'c')
     expect(config.backend.entries.JOB).toEqual([glob])
   })
 
   it('rejects a kind it does not know', () => {
     expect(() => parseConfig('{"surface":"backend","backend":{"entries":{"WORKER":["a.ts"]}}}', 'c')).toThrow(/WORKER/)
+  })
+})
+
+describe('path globs', () => {
+  it.each([
+    ['roles.global', { roles: { global: ['/src/App.tsx'] } }],
+    ['ignore', { ignore: ['{src/a/**,/legacy/**}'] }],
+    ['exclude', { exclude: ['{a/**,/b/**}'] }],
+  ])('rejects a glob with a leading "/" in %s, which matches no changed file', (_key, config) => {
+    expect(() => parseConfig(JSON.stringify(config), 'c')).toThrow(/leading "\/"/)
+  })
+
+  it.each([`${'{,}'.repeat(40)}a.ts`, `${'{'.repeat(40)}a.ts`])('checks the glob %s in linear time', (glob) => {
+    const start = performance.now()
+    expect(parseConfig(JSON.stringify({ surface: 'backend', ignore: [glob] }), 'c').ignore).toEqual([glob])
+    expect(performance.now() - start).toBeLessThan(1000)
   })
 })
 

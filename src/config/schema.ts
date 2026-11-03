@@ -1,13 +1,75 @@
 import { z } from 'zod'
 
 const glob = z.string().min(1, 'glob patterns cannot be empty')
-const globs = z.array(glob)
+/** Position of the "}" that closes each "{". A "{" with none is a literal character. */
+function closingBraces(g: string): Map<number, number> {
+  const close = new Map<number, number>()
+  const open: number[] = []
+  for (let i = 0; i < g.length; i++) {
+    if (g[i] === '\\') i++
+    else if (g[i] === '{') open.push(i)
+    else if (g[i] === '}') {
+      const start = open.pop()
+      if (start !== undefined) close.set(start, i)
+    }
+  }
+  return close
+}
+
+/**
+ * Reads a glob, or one brace alternative of it (`nested`), from `from`: whether one of its brace expansions can start
+ * with "/", and whether one can be empty. Each character is read once, so the time is linear.
+ */
+function scanStart(g: string, close: Map<number, number>, from: number, nested: boolean): { slash: boolean; empty: boolean; end: number } {
+  let slash = false
+  let empty = true
+  let i = from
+  while (i < g.length && !(nested && (g[i] === ',' || g[i] === '}'))) {
+    const end = g[i] === '{' ? close.get(i) : undefined
+    if (end === undefined) {
+      // `\/` matches a "/" too.
+      if (empty && (g[i] === '/' || (g[i] === '\\' && g[i + 1] === '/'))) slash = true
+      empty = false
+      i += g[i] === '\\' ? 2 : 1
+      continue
+    }
+    let groupSlash = false
+    let groupEmpty = false
+    let alternatives = 0
+    let j = i
+    do {
+      const alternative = scanStart(g, close, j + 1, true)
+      groupSlash ||= alternative.slash
+      groupEmpty ||= alternative.empty
+      alternatives++
+      j = alternative.end
+    } while (j < end)
+    // A group with one alternative (`{a}`, `{}`) is literal text: its expansion starts with "{".
+    if (alternatives === 1) {
+      groupSlash = false
+      groupEmpty = false
+    }
+    if (empty) slash ||= groupSlash
+    empty &&= groupEmpty
+    i = end + 1
+  }
+  return { slash, empty, end: i }
+}
+
+/**
+ * Whether a brace expansion of the glob starts with "/" (`/a`, `{a,/b}`, `{,x}/a`). Changed files have relative paths,
+ * so such a glob never matches. Text before a brace is a prefix (`src{/,/a/}*.ts`).
+ */
+const isRooted = (g: string): boolean => scanStart(g, closingBraces(g), 0, false).slash
+const pathGlob = glob.refine((g) => !isRooted(g), 'write the glob relative to the project or repository, with no leading "/"')
+const globs = z.array(pathGlob)
 
 /** Kinds of the entry points a TypeScript backend names in `backend.entries`. */
 export const ENTRY_KINDS = ['JOB', 'CONSUMER', 'RPC', 'RUN'] as const
 // `!(a).ts` is a positive glob; `{./a,b}` holds a segment like any other.
-const isRelativePositive = (g: string): boolean => (!g.startsWith('!') || g.startsWith('!(')) && !g.split(/[/{},]/).some((seg) => seg === '.' || seg === '..')
-const entryGlob = glob.refine(isRelativePositive, 'write a positive glob relative to the project, with no "!", "./" or "../"')
+const isPositive = (g: string): boolean => !g.startsWith('!') || g.startsWith('!(')
+const hasDotSegment = (g: string): boolean => g.split(/[/{},]/).some((seg) => seg === '.' || seg === '..')
+const entryGlob = pathGlob.refine((g) => isPositive(g) && !hasDotSegment(g), 'write a positive glob relative to the project, with no "!", "./" or "../"')
 
 /**
  * Environment, infrastructure and CI files (deploy-time configuration, not code): matched anywhere in the repository,
