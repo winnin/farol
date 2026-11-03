@@ -873,3 +873,9 @@ Every decision not covered by `docs/SPEC.md`. One entry per decision: problem, o
 - **`.farol.json`:** `report.sinceIn` and `report.sinceReportUrl`, `sinceIn` relative to the file.
 - **Not changed:** an all-zero file with a top-level conditional is no false proof: the proof needs every statement at 0, and the `if` itself runs on load. File-less score items are one group each in `scoreGroups` (a contract change and a vulnerable dependency are two parts, both in Must check); a test covers it.
 
+## 2026-11-03 — Comments-only changes are not risk
+
+- **Problem:** on PR #8, two TypeScript files whose only change was a doc comment (`src/cli/workspace.ts`, `src/routes/files.ts`) were `existing-file-modified`, reached by 4 commands, and added to the merge risk (82 instead of 69). TypeScript backends use the file graph, so any change to a file counted; and even Go/Python comments-only files kept the 0.02 weight of an additive change.
+- **Choice:** `isCommentsOnlyChange` (classify/additive.ts) prints the base and head of a modified JS/TS source or resolvers file with the TypeScript printer (`removeComments`), which also normalizes layout; JSX text stays text, so `<p>a // b</p>` is code. Equal output, and the same code-relevant comments (JSX pragmas with their value, `#__PURE__`/`#__NO_SIDE_EFFECTS__`, `webpack…:` hints, `@vite-ignore`), means comments or formatting only: `declarations-additive` ("only comments or formatting changed"), no reach, no declaration impact. A file that does not parse is never comments-only. Go/Python declaration impacts with nothing added or changed get the same mark. Output files carry `commentsOnly: true`, and `scoreItems` gives them no weight.
+- **Reason:** user request. A comment cannot change what runs; adding wrapping parentheses can (it is a different syntax tree), so it is not counted as formatting.
+

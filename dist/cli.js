@@ -237313,6 +237313,19 @@ function isTypeOnlyModule(file2, code2) {
     return modifiers.some((m) => m.kind === import_typescript2.default.SyntaxKind.DeclareKeyword) && !import_typescript2.default.isEnumDeclaration(s) && !import_typescript2.default.isVariableStatement(s);
   });
 }
+var SCRIPT_FILE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
+var CODE_COMMENTS = /@jsx(?:ImportSource|Runtime|Frag)?\s+[^\s*]+|@jsx\b|[#@]__(?:PURE|NO_SIDE_EFFECTS)__|webpack[A-Z]\w*\s*:\s*[^,*]+|@vite-ignore/g;
+var PRINTER = import_typescript2.default.createPrinter({ removeComments: true });
+function isCommentsOnlyChange(file2, base, head) {
+  if (!SCRIPT_FILE.test(file2)) return false;
+  const print2 = (code2) => {
+    const { sourceFile, errors } = parseIsolated(file2, code2);
+    return errors.length > 0 ? null : PRINTER.printFile(sourceFile);
+  };
+  const before = print2(base);
+  if (before === null || before !== print2(head)) return false;
+  return isDeepStrictEqual(base.match(CODE_COMMENTS) ?? [], head.match(CODE_COMMENTS) ?? []);
+}
 
 // src/classify/reach.ts
 function createReachIndex(graph) {
@@ -237743,6 +237756,12 @@ function classify(input2) {
       reachTargets.push({ path: file2.path, reportModified: false });
       continue;
     }
+    if (input2.commentsOnlyFiles?.has(file2.path)) {
+      out.additive = true;
+      out.commentsOnly = true;
+      reasons.push(reason("declarations-additive", "only comments or formatting changed", file2.path));
+      continue;
+    }
     const declImpact = role === "source" ? impactOf(file2.path) : void 0;
     if (declImpact) {
       out.additive = declImpact.additive;
@@ -237753,6 +237772,7 @@ function classify(input2) {
           ...declImpact.added.length > 0 ? [`new declarations ${list2(declImpact.added)}`] : [],
           ...declImpact.erased && declImpact.erased.length > 0 ? [`types changed (erased at runtime) ${list2(declImpact.erased)}`] : []
         ];
+        if (parts.length === 0) out.commentsOnly = true;
         reasons.push(reason("declarations-additive", parts.length > 0 ? `only additions: ${parts.join("; ")}` : "only comments or formatting changed", file2.path));
       } else {
         const removedEntries = declImpact.problems.filter((p) => p.startsWith("entry point ") && p.endsWith(" was removed"));
@@ -238152,7 +238172,9 @@ var FileSchema = external_exports.object({
   linesAdded: count,
   linesRemoved: count,
   /** Added TypeScript/JavaScript files that only declare things (types, re-exports, static constants): no logic of their own. */
-  declarationsOnly: external_exports.literal(true).optional()
+  declarationsOnly: external_exports.literal(true).optional(),
+  /** Modified files whose code is the same in both versions: only comments or formatting changed (no risk). */
+  commentsOnly: external_exports.literal(true).optional()
 }).strict();
 var RangeSchema = external_exports.object({ start: line, end: line }).strict();
 var CoverageSignalSchema = external_exports.object({
@@ -251549,11 +251571,13 @@ async function runAnalyze(ctx, options, deps) {
         baseRoutes = routesBase === void 0 ? null : await baseRouteTable(ctx, ws, mb, routesBase);
       }
       const manifests = await manifestDiffs(ctx, files, roleOf, mb, meta3.head.sha);
-      const tsModified = files.filter((f) => f.status === "modified" && roleOf(f.path) === "source" && /\.(ts|tsx|mts|cts)$/.test(f.path)).map((f) => f.path);
-      const tsBase = await readFiles(ctx.repoRoot, mb, tsModified);
-      const tsHead = await readFiles(ctx.repoRoot, meta3.head.sha, tsModified);
+      const scriptModified = files.filter((f) => f.status === "modified" && (roleOf(f.path) === "source" || roleOf(f.path) === "resolvers") && /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(f.path)).map((f) => f.path);
+      const tsBase = await readFiles(ctx.repoRoot, mb, scriptModified);
+      const tsHead = await readFiles(ctx.repoRoot, meta3.head.sha, scriptModified);
+      const commentsOnlyFiles = new Set(scriptModified.filter((p) => isCommentsOnlyChange(p, tsBase.get(p) ?? "", tsHead.get(p) ?? "x(")));
+      const tsModified = scriptModified.filter((p) => roleOf(p) === "source" && /\.(ts|tsx|mts|cts)$/.test(p) && !commentsOnlyFiles.has(p));
       const typeOnlyFiles = new Set(tsModified.filter((p) => isTypeOnlyModule(p, tsBase.get(p) ?? "x") && isTypeOnlyModule(p, tsHead.get(p) ?? "x")));
-      const declChanged = ws.backend ? [] : files.filter((f) => f.status !== "renamed" && roleOf(f.path) === "source" && /\.(ts|tsx|mts|cts)$/.test(f.path) && !typeOnlyFiles.has(f.path));
+      const declChanged = ws.backend ? [] : files.filter((f) => f.status !== "renamed" && roleOf(f.path) === "source" && /\.(ts|tsx|mts|cts)$/.test(f.path) && !typeOnlyFiles.has(f.path) && !commentsOnlyFiles.has(f.path));
       const declBaseText = await readFiles(ctx.repoRoot, mb, declChanged.filter((f) => f.status !== "added").map((f) => f.oldPath ?? f.path));
       const head = declChanged.length === 0 ? { module: "", files: [], decls: [], edges: [], entries: [], problems: [], comments: [] } : tsDeclGraph({ project: ws.project, repoRoot: toPosix(ctx.repoRoot), isOrigin: (p) => {
         const r = roleOf(p);
@@ -251563,7 +251587,7 @@ async function runAnalyze(ctx, options, deps) {
       const existing = new Set((baseRoutes ?? ws.routes).routes.map((r) => r.key));
       const declImpactMap = declImpacts(baseOut, head, declChanged, () => true, { existing, erasedTypes: true });
       lap("base");
-      result = classify({ files, roleOf, manifests, typeOnlyFiles, declImpacts: declImpactMap, ...backend ? { backend: { impacts: backend.impacts } } : {}, graph: ws.graph, routesFile: ws.routesFile, ...ws.routesFromDirectory ? { routesFromDirectory: true } : {}, headRoutes: ws.routes, baseRoutes, baseText, headText });
+      result = classify({ files, roleOf, manifests, typeOnlyFiles, commentsOnlyFiles, declImpacts: declImpactMap, ...backend ? { backend: { impacts: backend.impacts } } : {}, graph: ws.graph, routesFile: ws.routesFile, ...ws.routesFromDirectory ? { routesFromDirectory: true } : {}, headRoutes: ws.routes, baseRoutes, baseText, headText });
     }
     for (const f of result.files) if (f.status === "added" && (f.role === "source" || f.role === "barrel") && isScriptFile(f.path) && isDeclarationsOnlyModule(f.path, readHead(f.path) ?? "x(")) f.declarationsOnly = true;
     lap("classify");
@@ -251677,9 +251701,10 @@ function scoreItems(o) {
   const coverage = fileCoverage(o);
   const coverageNote = o.signals.coverage.status === "ok" ? "not measured" : "coverage not verified";
   const declarationsOnly = new Set(o.files.filter((f) => f.declarationsOnly === true).map((f) => f.path));
+  const commentsOnly = new Set(o.files.filter((f) => f.commentsOnly === true).map((f) => f.path));
   const declarationWeight = Math.min(DECLARATIONS_FILE_WEIGHT, 1 - (1 - DECLARATIONS_TOTAL_WEIGHT) ** (1 / Math.max(1, declarationsOnly.size)));
   for (const f of o.risk.files) {
-    if (!isCode(f.path)) continue;
+    if (!isCode(f.path) || commentsOnly.has(f.path)) continue;
     if (declarationsOnly.has(f.path)) {
       add(f.path, "change", declarationWeight, `added \xB7 only declarations (types, re-exports, static constants): no logic of its own`);
       continue;
@@ -252297,7 +252322,7 @@ var REASON_TEXT = {
   "new-file-reached-by-existing-route": "new file reached by an existing route",
   "tests-modified": "existing test modified",
   "type-only-change": "types-only file changed (erased at runtime)",
-  "declarations-additive": "only new declarations, comments or formatting (Go)",
+  "declarations-additive": "only new declarations, comments or formatting",
   "dependency-changed": "dependency change (not critical)",
   "lockfile-changed": "lockfile changed with the manifests",
   "route-added": "new route",

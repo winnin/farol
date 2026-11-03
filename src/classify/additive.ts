@@ -185,3 +185,24 @@ export function isTypeOnlyModule(file: string, code: string): boolean {
     return modifiers.some((m) => m.kind === ts.SyntaxKind.DeclareKeyword) && !ts.isEnumDeclaration(s) && !ts.isVariableStatement(s)
   })
 }
+
+const SCRIPT_FILE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/
+/** Comments that change emitted or bundled code, with their values: JSX pragmas, pure annotations, bundler hints. */
+const CODE_COMMENTS = /@jsx(?:ImportSource|Runtime|Frag)?\s+[^\s*]+|@jsx\b|[#@]__(?:PURE|NO_SIDE_EFFECTS)__|webpack[A-Z]\w*\s*:\s*[^,*]+|@vite-ignore/g
+const PRINTER = ts.createPrinter({ removeComments: true })
+
+/**
+ * Whether a JS/TS file changed only in comments or formatting: both versions print the same with the TypeScript printer
+ * (comments removed, layout normalized; JSX text stays text), and the comments that change emitted or bundled code are
+ * the same. A file that does not parse is never comments-only.
+ */
+export function isCommentsOnlyChange(file: string, base: string, head: string): boolean {
+  if (!SCRIPT_FILE.test(file)) return false
+  const print = (code: string): string | null => {
+    const { sourceFile, errors } = parseIsolated(file, code)
+    return errors.length > 0 ? null : PRINTER.printFile(sourceFile)
+  }
+  const before = print(base)
+  if (before === null || before !== print(head)) return false
+  return isDeepStrictEqual(base.match(CODE_COMMENTS) ?? [], head.match(CODE_COMMENTS) ?? [])
+}

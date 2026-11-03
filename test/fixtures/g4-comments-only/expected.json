@@ -36,7 +36,8 @@
       "role": "source",
       "linesAdded": 2,
       "linesRemoved": 1,
-      "additive": true
+      "additive": true,
+      "commentsOnly": true
     }
   ],
   "ignoredFiles": [],

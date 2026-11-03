@@ -107,7 +107,7 @@ export const REASON_TEXT: Record<ReasonCode, string> = {
   'new-file-reached-by-existing-route': 'new file reached by an existing route',
   'tests-modified': 'existing test modified',
   'type-only-change': 'types-only file changed (erased at runtime)',
-  'declarations-additive': 'only new declarations, comments or formatting (Go)',
+  'declarations-additive': 'only new declarations, comments or formatting',
   'dependency-changed': 'dependency change (not critical)',
   'lockfile-changed': 'lockfile changed with the manifests',
   'route-added': 'new route',

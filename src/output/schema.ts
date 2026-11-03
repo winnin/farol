@@ -22,6 +22,8 @@ export const FileSchema = z
     linesRemoved: count,
     /** Added TypeScript/JavaScript files that only declare things (types, re-exports, static constants): no logic of their own. */
     declarationsOnly: z.literal(true).optional(),
+    /** Modified files whose code is the same in both versions: only comments or formatting changed (no risk). */
+    commentsOnly: z.literal(true).optional(),
   })
   .strict()
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Comments and formatting are not risk.** A modified TypeScript/JavaScript file whose code prints the same without comments (TypeScript printer) is `declarations-additive` with no reach, like Go and Python files already were, and every comments-only file (`commentsOnly` in the JSON) adds nothing to the merge risk. Comments that change emitted or bundled code (`@jsxImportSource`, `#__PURE__`, `webpackChunkName`) still count as code. Found on a contributor's PR, where two files with only doc comments changed weighed 12 points.
+
 ## 0.2.1 — 2026-10-26
 
 - **PR comment follows the report.** Merge risk and verdict in the title, one sentence on where the risk comes from, *Must check* as a task list, the High and Medium files with their share of the score, and how much new code is tested; the other signals move to a collapsed *All signals* block. Points match the report: a file's findings are parts of their own (a file no longer shows "risk 34" with its security finding inside).

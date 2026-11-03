@@ -4,6 +4,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 import { analyzeScenario, normalizeOutput } from '../helpers/analyze.js'
 import { FIXTURES_DIR } from '../helpers/repo.js'
 import type { Output } from '../../src/output/schema.js'
+import { scoreItems } from '../../src/report/merge-score.js'
 
 /** Expected class and key facts per scenario (docs/SPEC.md), checked on top of the golden file. */
 const SCENARIOS: Record<string, { classification: Output['classification']; check?: (o: Output) => void }> = {
@@ -51,6 +52,17 @@ const SCENARIOS: Record<string, { classification: Output['classification']; chec
     check: (o) => {
       expect(o.routes.affected.map((r) => r.path)).toEqual(['/about'])
       expect(o.reasons.find((r) => r.code === 'existing-file-modified')?.detail).toContain('func src/lib/labels.ts#aboutLabel changed')
+    },
+  },
+  // Only comments changed in a component two pages render: the code that runs is the same, so nothing is affected
+  // and the file adds nothing to the merge risk.
+  '22-comments-only': {
+    classification: 'isolated',
+    check: (o) => {
+      expect(o.routes.affected).toEqual([])
+      expect(o.files.find((f) => f.path === 'src/components/Card.tsx')?.commentsOnly).toBe(true)
+      expect(o.reasons.filter((r) => r.file === 'src/components/Card.tsx').map((r) => [r.code, r.detail])).toEqual([['declarations-additive', 'only comments or formatting changed']])
+      expect(scoreItems(o).filter((i) => i.file === 'src/components/Card.tsx')).toEqual([])
     },
   },
 }

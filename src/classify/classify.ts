@@ -36,6 +36,8 @@ export interface ClassifyInput {
   baseText: ReadonlyMap<string, string>
   /** Head contents of modified routes, barrel and i18n files. */
   headText: ReadonlyMap<string, string>
+  /** Modified JS/TS source files whose code is the same in both versions: only comments or formatting changed. */
+  commentsOnlyFiles?: ReadonlySet<string>
 }
 
 export interface ClassifyResult {
@@ -232,6 +234,12 @@ export function classify(input: ClassifyInput): ClassifyResult {
       reachTargets.push({ path: file.path, reportModified: false })
       continue
     }
+    if (input.commentsOnlyFiles?.has(file.path)) {
+      out.additive = true
+      out.commentsOnly = true
+      reasons.push(reason('declarations-additive', 'only comments or formatting changed', file.path))
+      continue
+    }
     // Modified existing file: only routes, barrel and i18n files can be additive.
     const declImpact = role === 'source' ? impactOf(file.path) : undefined
     if (declImpact) {
@@ -244,6 +252,7 @@ export function classify(input: ClassifyInput): ClassifyResult {
           ...(declImpact.added.length > 0 ? [`new declarations ${list(declImpact.added)}`] : []),
           ...(declImpact.erased && declImpact.erased.length > 0 ? [`types changed (erased at runtime) ${list(declImpact.erased)}`] : []),
         ]
+        if (parts.length === 0) out.commentsOnly = true
         reasons.push(reason('declarations-additive', parts.length > 0 ? `only additions: ${parts.join('; ')}` : 'only comments or formatting changed', file.path))
       }
       else {
