@@ -237962,7 +237962,7 @@ function classify(input2) {
   for (const r of addedRoutes) reasons.push(reason("route-added", input2.backend ? `new entry point ${r.key}${r.entry ? ` (registered in ${r.entry})` : ""}` : `${r.path} (${r.key}) renders ${r.entry ?? "nothing"}`, input2.routesFile === "" && !input2.routesFromDirectory ? void 0 : routeFileOf(r.key)));
   const dynamicRoutes = [...headRoutes.dynamic, ...(input2.baseRoutes?.dynamic ?? []).map((d) => ({ ...d, detail: `in the base version: ${d.detail}` }))];
   for (const d of dynamicRoutes) reasons.push(reason("dynamic-route", `line ${d.line}: ${d.detail}`, d.file));
-  const changed = new Set(input2.files.filter((f) => f.status !== "deleted").map((f) => f.path));
+  const changed = new Set(input2.files.filter((f) => f.status !== "deleted" && !input2.isIgnored(f.path)).map((f) => f.path));
   const removed = input2.files.flatMap((f) => f.status === "deleted" ? [f.path] : f.status === "renamed" && f.oldPath !== void 0 ? [f.oldPath] : []);
   for (const e of graph.parseErrors) if (changed.has(e.file)) reasons.push(reason("parse-error", `line ${e.line}: ${e.message}`, e.file));
   for (const u of graph.unresolved) {

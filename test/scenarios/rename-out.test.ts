@@ -77,6 +77,23 @@ describe('a rename out of production code', () => {
     expect(codes(o)).not.toContain('manifest-changed')
   })
 
+  it.each([
+    ['an import that no longer resolves', 'import { helper } from \'./helper\'\nexport const user = () => helper(1)\n'],
+    ['a syntax error', 'export const user = (\n'],
+  ])('reads a file that moves to an ignored path with %s only as a rename out', async (_name, code) => {
+    const o = await app((repo) => {
+      repo.write('src/legacy/user.ts', code)
+      repo.remove('src/lib/user.ts')
+    }, (repo) => {
+      config(repo, { ignore: ['src/legacy/**'] })
+      repo.write('src/lib/helper.ts', 'export const helper = (n: number) => n\n')
+      repo.write('src/lib/user.ts', code)
+    })
+    expect(o.classification).toBe('touches-existing')
+    expect(o.reasons).toContainEqual(expect.objectContaining({ code: 'existing-file-renamed', file: 'src/legacy/user.ts' }))
+    expect(o.reasons.filter((r) => r.file === 'src/legacy/user.ts').map((r) => r.code)).toEqual(['existing-file-renamed'])
+  })
+
   it('suggests no reviewers for a file that moves to an ignored path', async () => {
     const o = await analyzeVariant('17-test-only', cleanups, mv('src/lib/orphan.ts', 'src/legacy/orphan.ts'), (repo) => {
       config(repo, { ignore: ['src/legacy/**'] })

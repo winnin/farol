@@ -129,7 +129,8 @@ export function classify(input: ClassifyInput): ClassifyResult {
   const dynamicRoutes = [...headRoutes.dynamic, ...(input.baseRoutes?.dynamic ?? []).map((d) => ({ ...d, detail: `in the base version: ${d.detail}` }))]
   for (const d of dynamicRoutes) reasons.push(reason('dynamic-route', `line ${d.line}: ${d.detail}`, d.file))
 
-  const changed = new Set(input.files.filter((f) => f.status !== 'deleted').map((f) => f.path))
+  // An ignored new path is only a rename out: its parse errors and imports do not count.
+  const changed = new Set(input.files.filter((f) => f.status !== 'deleted' && !input.isIgnored(f.path)).map((f) => f.path))
   const removed = input.files.flatMap((f) => (f.status === 'deleted' ? [f.path] : f.status === 'renamed' && f.oldPath !== undefined ? [f.oldPath] : []))
   for (const e of graph.parseErrors) if (changed.has(e.file)) reasons.push(reason('parse-error', `line ${e.line}: ${e.message}`, e.file))
   for (const u of graph.unresolved) {
