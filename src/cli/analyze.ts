@@ -206,7 +206,8 @@ export async function runAnalyze(ctx: Context, options: AnalyzeOptions, deps: An
     meta.mergeBase = mb
     const ignoredOf = createIgnoreOf(ctx, options.ignore ?? [])
     const allFiles = await diffFiles(ctx.repoRoot, mb, meta.head.sha)
-    const files = allFiles.filter((f) => !ignoredOf(f.path))
+    // A rename stays when one of its paths is not ignored: code that leaves for an ignored path is still gone.
+    const files = allFiles.filter((f) => !ignoredOf(f.path) || (f.oldPath !== undefined && !ignoredOf(f.oldPath)))
     meta.ignoredFiles = allFiles.filter((f) => !files.includes(f)).map((f) => f.path)
     lap('diff')
     ctx.log(`${files.length} changed file(s) between ${mb.slice(0, 12)} and ${meta.head.sha.slice(0, 12)}`)

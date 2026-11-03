@@ -1,4 +1,3 @@
-import { posix } from 'node:path'
 import type { ChangedFile } from '../git/types.js'
 import { compareStrings, sortedUnique } from '../output/order.js'
 import type { AddedRoute, AffectedRoute, Dependencies, OutputFile, UnresolvedImportOut } from '../output/schema.js'
@@ -14,6 +13,7 @@ import { computeRisk, type FileRisk } from './risk.js'
 import type { BackendFileImpact } from '../backend/impact.js'
 import { describeChange, sortChanges, type ManifestResult } from './dependencies.js'
 import { lockfileReason } from './lockfile.js'
+import { leavesCountedCode, targetsRemoved } from './removed.js'
 
 export interface ClassifyInput {
   files: readonly ChangedFile[]
@@ -52,16 +52,6 @@ export interface ClassifyResult {
   dependencies: Dependencies
   risk: { totalPages: number; files: FileRisk[]; summary: { high: number; medium: number; low: number } }
   diagnostics: { unresolvedImports: UnresolvedImportOut[]; dynamicRoutes: DynamicRoute[]; parseErrors: ParseError[] }
-}
-
-function withoutExtension(path: string): string {
-  const ext = posix.extname(path)
-  return ext === '' ? path : path.slice(0, -ext.length)
-}
-
-/** Whether an unresolved specifier target could have pointed at a file this PR deleted or renamed away. */
-function targetsRemoved(target: string, removed: readonly string[]): boolean {
-  return removed.some((r) => r === target || withoutExtension(r) === target || (posix.dirname(r) === target && posix.basename(r).startsWith('index.')))
 }
 
 class AffectedCollector {
@@ -193,6 +183,8 @@ export function classify(input: ClassifyInput): ClassifyResult {
     const out: OutputFile = { path: file.path, status: file.status, role, linesAdded: file.added.length, linesRemoved: file.removed.length }
     if (file.oldPath !== undefined) out.oldPath = file.oldPath
     outputFiles.push(out)
+    const leaves = leavesCountedCode(file, role, input.roleOf)
+    if (leaves) reasons.push(reason('existing-file-renamed', `renamed from ${file.oldPath ?? '?'}, which no longer counts as production code`, file.path))
 
     if (role === 'excluded' || role === 'story') continue
     if (role === 'manifest') {
@@ -219,7 +211,7 @@ export function classify(input: ClassifyInput): ClassifyResult {
       continue
     }
     if (role === 'test') {
-      if (file.status !== 'added') reasons.push(reason('tests-modified', `existing test ${file.status}, ${file.removed.length} line(s) removed`, file.path))
+      if (file.status !== 'added' && !leaves) reasons.push(reason('tests-modified', `existing test ${file.status}, ${file.removed.length} line(s) removed`, file.path))
       continue
     }
     if (file.status === 'added') {

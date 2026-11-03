@@ -237187,9 +237187,6 @@ async function loadContext(options) {
 import { readFileSync as readFileSync4 } from "fs";
 import { posix as posix17, resolve as resolve3 } from "path";
 
-// src/classify/classify.ts
-import { posix as posix3 } from "path";
-
 // src/routes/paths.ts
 var KEY_SEPARATOR = " > ";
 function normalizeUrlPath(path3) {
@@ -237879,14 +237876,29 @@ function lockfileReason(file2, manifests, otherManifests) {
   return reason("lockfile-only-change", `lockfile ${file2.status}${why}: resolved versions may differ${unreadable([...manifests, ...coveredOthers])}`, file2.path);
 }
 
-// src/classify/classify.ts
+// src/classify/removed.ts
+import { posix as posix3 } from "path";
 function withoutExtension(path3) {
   const ext = posix3.extname(path3);
   return ext === "" ? path3 : path3.slice(0, -ext.length);
 }
+var SOURCES_OF_EMITTED = {
+  ".js": [".ts", ".tsx", ".jsx"],
+  ".jsx": [".tsx"],
+  ".mjs": [".mts"],
+  ".cjs": [".cts"]
+};
 function targetsRemoved(target, removed) {
-  return removed.some((r) => r === target || withoutExtension(r) === target || posix3.dirname(r) === target && posix3.basename(r).startsWith("index."));
+  const stem2 = withoutExtension(target);
+  const sources = (SOURCES_OF_EMITTED[posix3.extname(target)] ?? []).map((ext) => stem2 + ext);
+  return removed.some((r) => r === target || withoutExtension(r) === target || sources.includes(r) || posix3.dirname(r) === target && posix3.basename(r).startsWith("index."));
 }
+var NOT_COUNTED = /* @__PURE__ */ new Set(["test", "story", "excluded", "outside"]);
+function leavesCountedCode(file2, newRole, roleOf) {
+  return file2.status === "renamed" && file2.oldPath !== void 0 && NOT_COUNTED.has(newRole) && !NOT_COUNTED.has(roleOf(file2.oldPath));
+}
+
+// src/classify/classify.ts
 var AffectedCollector = class {
   byKey = /* @__PURE__ */ new Map();
   add(route, file2, chain) {
@@ -237995,6 +238007,8 @@ function classify(input2) {
     const out = { path: file2.path, status: file2.status, role, linesAdded: file2.added.length, linesRemoved: file2.removed.length };
     if (file2.oldPath !== void 0) out.oldPath = file2.oldPath;
     outputFiles.push(out);
+    const leaves = leavesCountedCode(file2, role, input2.roleOf);
+    if (leaves) reasons.push(reason("existing-file-renamed", `renamed from ${file2.oldPath ?? "?"}, which no longer counts as production code`, file2.path));
     if (role === "excluded" || role === "story") continue;
     if (role === "manifest") {
       const diff2 = input2.manifests.find((m) => m.manifest === file2.path);
@@ -238019,7 +238033,7 @@ function classify(input2) {
       continue;
     }
     if (role === "test") {
-      if (file2.status !== "added") reasons.push(reason("tests-modified", `existing test ${file2.status}, ${file2.removed.length} line(s) removed`, file2.path));
+      if (file2.status !== "added" && !leaves) reasons.push(reason("tests-modified", `existing test ${file2.status}, ${file2.removed.length} line(s) removed`, file2.path));
       continue;
     }
     if (file2.status === "added") {
@@ -252510,7 +252524,7 @@ async function runAnalyze(ctx, options, deps) {
     meta3.mergeBase = mb;
     const ignoredOf = createIgnoreOf(ctx, options.ignore ?? []);
     const allFiles = await diffFiles(ctx.repoRoot, mb, meta3.head.sha);
-    const files = allFiles.filter((f) => !ignoredOf(f.path));
+    const files = allFiles.filter((f) => !ignoredOf(f.path) || f.oldPath !== void 0 && !ignoredOf(f.oldPath));
     meta3.ignoredFiles = allFiles.filter((f) => !files.includes(f)).map((f) => f.path);
     lap("diff");
     ctx.log(`${files.length} changed file(s) between ${mb.slice(0, 12)} and ${meta3.head.sha.slice(0, 12)}`);
