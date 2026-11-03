@@ -154,6 +154,18 @@ describe('entry points named in backend.entries', () => {
       expect(codes(o)).toContain('type-only-change')
       expect(o.routes.affected).toEqual([])
     })
+
+    it('changes nothing at runtime when the file is a barrel of types only', async () => {
+      const BARREL = 'src/jobs/index.ts'
+      const o = await pr((repo) => { repo.write(BARREL, "export type { A } from './a'\nexport type { B } from './b'\n") }, (repo) => {
+        entries({ JOB: [BARREL] })(repo)
+        repo.write('src/jobs/a.ts', 'export type A = number\n')
+        repo.write('src/jobs/b.ts', 'export type B = number\n')
+        repo.write(BARREL, "export type { A } from './a'\n")
+      })
+      expect(o.classification).toBe('isolated')
+      expect(o.routes.affected).toEqual([])
+    })
   })
 
   describe('what a job runs', () => {

@@ -236451,8 +236451,8 @@ function date4(params) {
 var glob = external_exports.string().min(1, "glob patterns cannot be empty");
 var globs = external_exports.array(glob);
 var ENTRY_KINDS = ["JOB", "CONSUMER", "RPC", "RUN"];
-var isRelativePositive = (g) => (!g.startsWith("!") || g.startsWith("!(")) && !g.split(/[/{},]/).some((seg) => seg === "." || seg === "..");
-var entryGlob = glob.refine(isRelativePositive, 'write a positive glob relative to the project, with no "!", "./" or "../"');
+var isRelativePositive = (g) => (!g.startsWith("!") || g.startsWith("!(")) && !/(^|[{,])\//.test(g) && !g.split(/[/{},]/).some((seg) => seg === "." || seg === "..");
+var entryGlob = glob.refine(isRelativePositive, 'write a positive glob relative to the project, with no "!", "./", "../" or leading "/"');
 var DEFAULT_INFRA = [
   "**/.env",
   "**/.env.*",
@@ -252496,7 +252496,8 @@ async function runAnalyze(ctx, options, deps) {
         baseRoutes = routesBase === void 0 ? null : await baseRouteTable(ctx, ws, mb, routesBase);
       }
       const { manifests, otherManifests } = await projectAndOtherManifests(ctx, files, roleOf, mb, meta3.head.sha);
-      const tsModified = files.filter((f) => f.status === "modified" && roleOf(f.path) === "source" && /\.(ts|tsx|mts|cts)$/.test(f.path)).map((f) => f.path);
+      const entryFiles = new Set(ws.backend?.configEntries.values());
+      const tsModified = files.filter((f) => f.status === "modified" && (roleOf(f.path) === "source" || entryFiles.has(f.path)) && /\.(ts|tsx|mts|cts)$/.test(f.path)).map((f) => f.path);
       const tsBase = await readFiles(ctx.repoRoot, mb, tsModified);
       const tsHead = await readFiles(ctx.repoRoot, meta3.head.sha, tsModified);
       const typeOnlyFiles = new Set(tsModified.filter((p) => isTypeOnlyModule(p, tsBase.get(p) ?? "x") && isTypeOnlyModule(p, tsHead.get(p) ?? "x")));

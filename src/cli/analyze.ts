@@ -259,7 +259,8 @@ export async function runAnalyze(ctx: Context, options: AnalyzeOptions, deps: An
         baseRoutes = routesBase === undefined ? null : await baseRouteTable(ctx, ws, mb, routesBase)
       }
       const { manifests, otherManifests } = await projectAndOtherManifests(ctx, files, roleOf, mb, meta.head.sha)
-      const tsModified = files.filter((f) => f.status === 'modified' && roleOf(f.path) === 'source' && /\.(ts|tsx|mts|cts)$/.test(f.path)).map((f) => f.path)
+      const entryFiles = new Set(ws.backend?.configEntries.values())
+      const tsModified = files.filter((f) => f.status === 'modified' && (roleOf(f.path) === 'source' || entryFiles.has(f.path)) && /\.(ts|tsx|mts|cts)$/.test(f.path)).map((f) => f.path)
       const tsBase = await readFiles(ctx.repoRoot, mb, tsModified)
       const tsHead = await readFiles(ctx.repoRoot, meta.head.sha, tsModified)
       const typeOnlyFiles = new Set(tsModified.filter((p) => isTypeOnlyModule(p, tsBase.get(p) ?? 'x') && isTypeOnlyModule(p, tsHead.get(p) ?? 'x')))

@@ -6,8 +6,8 @@ const globs = z.array(glob)
 /** Kinds of the entry points a TypeScript backend names in `backend.entries`. */
 export const ENTRY_KINDS = ['JOB', 'CONSUMER', 'RPC', 'RUN'] as const
 // `!(a).ts` is a positive glob; `{./a,b}` holds a segment like any other.
-const isRelativePositive = (g: string): boolean => (!g.startsWith('!') || g.startsWith('!(')) && !g.split(/[/{},]/).some((seg) => seg === '.' || seg === '..')
-const entryGlob = glob.refine(isRelativePositive, 'write a positive glob relative to the project, with no "!", "./" or "../"')
+const isRelativePositive = (g: string): boolean => (!g.startsWith('!') || g.startsWith('!(')) && !/(^|[{,])\//.test(g) && !g.split(/[/{},]/).some((seg) => seg === '.' || seg === '..')
+const entryGlob = glob.refine(isRelativePositive, 'write a positive glob relative to the project, with no "!", "./", "../" or leading "/"')
 
 /**
  * Environment, infrastructure and CI files (deploy-time configuration, not code): matched anywhere in the repository,
