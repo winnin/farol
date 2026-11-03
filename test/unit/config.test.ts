@@ -98,11 +98,11 @@ describe('backend entry points', () => {
     expect(() => parseConfig(`{${rest},"backend":{"entries":{"JOB":["a.ts"]}}}`, 'c')).toThrow(/backend\.entries/)
   })
 
-  it.each(['../shared/jobs/*.ts', 'src/../jobs/*.ts', './src/jobs/*.ts', '!src/jobs/legacy.ts', 'src/{../x,a}/*.ts', '{./src/a/*.ts,src/b/*.ts}', '/src/jobs/*.ts', '{/src/a/*.ts,src/b/*.ts}', '{,}/src/jobs/*.ts', '{,src}/jobs/*.ts', '{{a,/b},c}/*.ts'])('rejects the glob %s, which would not match as written', (glob) => {
+  it.each(['../shared/jobs/*.ts', 'src/../jobs/*.ts', './src/jobs/*.ts', '!src/jobs/legacy.ts', 'src/{../x,a}/*.ts', '{./src/a/*.ts,src/b/*.ts}', '/src/jobs/*.ts', '{/src/a/*.ts,src/b/*.ts}', '{,}/src/jobs/*.ts', '{,src}/jobs/*.ts', '{{a,/b},c}/*.ts', '\\/src/jobs/*.ts'])('rejects the glob %s, which would not match as written', (glob) => {
     expect(() => parseConfig(JSON.stringify({ surface: 'backend', backend: { entries: { JOB: [glob] } } }), 'c')).toThrow(/relative to the project/)
   })
 
-  it.each(['!(top).ts', 'src/{a,b}/*.ts', 'src/.hidden/*.ts', 'src{/,/jobs/}*.ts', '{src,lib}/{a,/b}.ts', 'src{,/legacy}/*.ts'])('accepts the glob %s', (glob) => {
+  it.each(['!(top).ts', 'src/{a,b}/*.ts', 'src/.hidden/*.ts', 'src{/,/jobs/}*.ts', '{src,lib}/{a,/b}.ts', 'src{,/legacy}/*.ts', '{/a}.ts', '{}/a.ts'])('accepts the glob %s', (glob) => {
     const config = parseConfig(JSON.stringify({ surface: 'backend', backend: { entries: { JOB: [glob] } } }), 'c')
     expect(config.backend.entries.JOB).toEqual([glob])
   })

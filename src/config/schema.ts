@@ -8,7 +8,10 @@ function closingBraces(g: string): Map<number, number> {
   for (let i = 0; i < g.length; i++) {
     if (g[i] === '\\') i++
     else if (g[i] === '{') open.push(i)
-    else if (g[i] === '}' && open.length > 0) close.set(open.pop() ?? i, i)
+    else if (g[i] === '}') {
+      const start = open.pop()
+      if (start !== undefined) close.set(start, i)
+    }
   }
   return close
 }
@@ -24,19 +27,27 @@ function scanStart(g: string, close: Map<number, number>, from: number, nested: 
   while (i < g.length && !(nested && (g[i] === ',' || g[i] === '}'))) {
     const end = g[i] === '{' ? close.get(i) : undefined
     if (end === undefined) {
-      if (empty && g[i] === '/') slash = true
+      // `\/` matches a "/" too.
+      if (empty && (g[i] === '/' || (g[i] === '\\' && g[i + 1] === '/'))) slash = true
       empty = false
       i += g[i] === '\\' ? 2 : 1
       continue
     }
     let groupSlash = false
     let groupEmpty = false
-    for (let j = i + 1; ; j++) {
-      const alternative = scanStart(g, close, j, true)
+    let alternatives = 0
+    let j = i
+    do {
+      const alternative = scanStart(g, close, j + 1, true)
       groupSlash ||= alternative.slash
       groupEmpty ||= alternative.empty
+      alternatives++
       j = alternative.end
-      if (j >= end) break
+    } while (j < end)
+    // A group with one alternative (`{a}`, `{}`) is literal text: its expansion starts with "{".
+    if (alternatives === 1) {
+      groupSlash = false
+      groupEmpty = false
     }
     if (empty) slash ||= groupSlash
     empty &&= groupEmpty

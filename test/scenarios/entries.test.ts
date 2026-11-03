@@ -171,6 +171,7 @@ describe('entry points named in backend.entries', () => {
       ['changes nothing at runtime when a barrel of types only gains an inline type import', typeImports, {}, 'isolated'],
       ['erases a local inline type export under verbatimModuleSyntax', localTypes, { verbatimModuleSyntax: true }, 'isolated'],
       ['erases the imports of a declaration file under verbatimModuleSyntax', declaration, { verbatimModuleSyntax: true }, 'isolated'],
+      ['erases the imports of a declaration file of another extension under verbatimModuleSyntax', [declaration[0].replace('.d.ts', '.d.css.ts'), declaration[1], declaration[2]], { verbatimModuleSyntax: true, allowArbitraryExtensions: true }, 'isolated'],
     ])('%s', async (_name, [file, before, after], compilerOptions, classification) => {
       const o = await pr((repo) => { repo.write(file, before) }, (repo) => {
         entries({ JOB: [file] })(repo)

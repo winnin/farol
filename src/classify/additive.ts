@@ -197,11 +197,11 @@ function namesOnlyInlineTypes(s: ts.ExportDeclaration): boolean {
  * Under `options` that keep inline type statements, only `import type` and `export type` statements are erased.
  */
 export function isTypeOnlyModule(file: string, code: string, options: ts.CompilerOptions): boolean {
-  // A declaration file emits nothing, whatever the options.
-  const keeps = keepsInlineTypeStatements(options) && !/\.d\.[mc]?ts$/.test(file)
   if (!TS_FILE.test(file)) return false
   const { sourceFile: sf, errors } = parseIsolated(file, code)
   if (errors.length > 0) return false
+  // A declaration file emits nothing, whatever the options.
+  const keeps = keepsInlineTypeStatements(options) && !sf.isDeclarationFile
   return sf.statements.every((s) => {
     if (ts.isInterfaceDeclaration(s) || ts.isTypeAliasDeclaration(s)) return true
     // Bindings imported into a file that only declares types can only be used in type positions: erased. A side-effect

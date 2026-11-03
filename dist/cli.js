@@ -236455,7 +236455,10 @@ function closingBraces(g) {
   for (let i = 0; i < g.length; i++) {
     if (g[i] === "\\") i++;
     else if (g[i] === "{") open2.push(i);
-    else if (g[i] === "}" && open2.length > 0) close.set(open2.pop() ?? i, i);
+    else if (g[i] === "}") {
+      const start = open2.pop();
+      if (start !== void 0) close.set(start, i);
+    }
   }
   return close;
 }
@@ -236466,19 +236469,25 @@ function scanStart(g, close, from, nested) {
   while (i < g.length && !(nested && (g[i] === "," || g[i] === "}"))) {
     const end = g[i] === "{" ? close.get(i) : void 0;
     if (end === void 0) {
-      if (empty && g[i] === "/") slash = true;
+      if (empty && (g[i] === "/" || g[i] === "\\" && g[i + 1] === "/")) slash = true;
       empty = false;
       i += g[i] === "\\" ? 2 : 1;
       continue;
     }
     let groupSlash = false;
     let groupEmpty = false;
-    for (let j = i + 1; ; j++) {
-      const alternative = scanStart(g, close, j, true);
+    let alternatives = 0;
+    let j = i;
+    do {
+      const alternative = scanStart(g, close, j + 1, true);
       groupSlash ||= alternative.slash;
       groupEmpty ||= alternative.empty;
+      alternatives++;
       j = alternative.end;
-      if (j >= end) break;
+    } while (j < end);
+    if (alternatives === 1) {
+      groupSlash = false;
+      groupEmpty = false;
     }
     if (empty) slash ||= groupSlash;
     empty &&= groupEmpty;
@@ -237530,10 +237539,10 @@ function namesOnlyInlineTypes(s) {
   return s.exportClause !== void 0 && import_typescript2.default.isNamedExports(s.exportClause) && s.exportClause.elements.every((e) => e.isTypeOnly);
 }
 function isTypeOnlyModule(file2, code2, options) {
-  const keeps = keepsInlineTypeStatements(options) && !/\.d\.[mc]?ts$/.test(file2);
   if (!TS_FILE.test(file2)) return false;
   const { sourceFile: sf, errors } = parseIsolated(file2, code2);
   if (errors.length > 0) return false;
+  const keeps = keepsInlineTypeStatements(options) && !sf.isDeclarationFile;
   return sf.statements.every((s) => {
     if (import_typescript2.default.isInterfaceDeclaration(s) || import_typescript2.default.isTypeAliasDeclaration(s)) return true;
     if (import_typescript2.default.isImportDeclaration(s)) return s.importClause !== void 0 && (!keeps || isTypeOnlyImport(s.importClause));
