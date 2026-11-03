@@ -121,8 +121,7 @@ describe('path globs', () => {
     expect(() => parseConfig(JSON.stringify(config), 'c')).toThrow(/leading "\/"/)
   })
 
-  it('checks a glob of many empty brace groups in linear time', () => {
-    const glob = `${'{,}'.repeat(40)}a.ts`
+  it.each([`${'{,}'.repeat(40)}a.ts`, `${'{'.repeat(40)}a.ts`])('checks the glob %s in linear time', (glob) => {
     const start = performance.now()
     expect(parseConfig(JSON.stringify({ surface: 'backend', ignore: [glob] }), 'c').ignore).toEqual([glob])
     expect(performance.now() - start).toBeLessThan(1000)

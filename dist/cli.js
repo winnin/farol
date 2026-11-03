@@ -236449,37 +236449,44 @@ function date4(params) {
 
 // src/config/schema.ts
 var glob = external_exports.string().min(1, "glob patterns cannot be empty");
-function scanStart(g, from, nested) {
+function closingBraces(g) {
+  const close = /* @__PURE__ */ new Map();
+  const open2 = [];
+  for (let i = 0; i < g.length; i++) {
+    if (g[i] === "\\") i++;
+    else if (g[i] === "{") open2.push(i);
+    else if (g[i] === "}" && open2.length > 0) close.set(open2.pop() ?? i, i);
+  }
+  return close;
+}
+function scanStart(g, close, from, nested) {
   let slash = false;
   let empty = true;
   let i = from;
   while (i < g.length && !(nested && (g[i] === "," || g[i] === "}"))) {
-    if (g[i] === "{") {
-      let groupSlash = false;
-      let groupEmpty = false;
-      let j = i + 1;
-      for (; ; ) {
-        const alternative = scanStart(g, j, true);
-        groupSlash ||= alternative.slash;
-        groupEmpty ||= alternative.empty;
-        j = alternative.end;
-        if (j >= g.length || g[j] === "}") break;
-        j++;
-      }
-      if (j < g.length) {
-        if (empty) slash ||= groupSlash;
-        empty &&= groupEmpty;
-        i = j + 1;
-        continue;
-      }
+    const end = g[i] === "{" ? close.get(i) : void 0;
+    if (end === void 0) {
+      if (empty && g[i] === "/") slash = true;
+      empty = false;
+      i += g[i] === "\\" ? 2 : 1;
+      continue;
     }
-    if (empty && g[i] === "/") slash = true;
-    empty = false;
-    i += g[i] === "\\" ? 2 : 1;
+    let groupSlash = false;
+    let groupEmpty = false;
+    for (let j = i + 1; ; j++) {
+      const alternative = scanStart(g, close, j, true);
+      groupSlash ||= alternative.slash;
+      groupEmpty ||= alternative.empty;
+      j = alternative.end;
+      if (j >= end) break;
+    }
+    if (empty) slash ||= groupSlash;
+    empty &&= groupEmpty;
+    i = end + 1;
   }
   return { slash, empty, end: i };
 }
-var isRooted = (g) => scanStart(g, 0, false).slash;
+var isRooted = (g) => scanStart(g, closingBraces(g), 0, false).slash;
 var pathGlob = glob.refine((g) => !isRooted(g), 'write the glob relative to the project or repository, with no leading "/"');
 var globs = external_exports.array(pathGlob);
 var ENTRY_KINDS = ["JOB", "CONSUMER", "RPC", "RUN"];
