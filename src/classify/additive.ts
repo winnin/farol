@@ -189,8 +189,9 @@ export function checkI18nAdditive(baseText: string, headText: string): AdditiveR
 /**
  * Whether a TS file only declares types (interfaces, type aliases, type-only imports/exports, ambient declarations):
  * emitters erase all of it, so changing it cannot change runtime behavior. Enums and namespaces with values do not count.
+ * With `verbatimModuleSyntax` the emitter keeps every statement not written as `import type` or `export type`, so its module runs.
  */
-export function isTypeOnlyModule(file: string, code: string): boolean {
+export function isTypeOnlyModule(file: string, code: string, verbatimModuleSyntax: boolean): boolean {
   if (!/\.(ts|tsx|mts|cts)$/.test(file)) return false
   const { sourceFile: sf, errors } = parseIsolated(file, code)
   if (errors.length > 0) return false
@@ -198,8 +199,8 @@ export function isTypeOnlyModule(file: string, code: string): boolean {
     if (ts.isInterfaceDeclaration(s) || ts.isTypeAliasDeclaration(s)) return true
     // Bindings imported into a file that only declares types can only be used in type positions: erased. A side-effect
     // import (`import './x'`) runs code, so it does not count.
-    if (ts.isImportDeclaration(s)) return s.importClause !== undefined
-    if (ts.isExportDeclaration(s)) return s.isTypeOnly || (s.exportClause !== undefined && ts.isNamedExports(s.exportClause) && s.exportClause.elements.every((e) => e.isTypeOnly))
+    if (ts.isImportDeclaration(s)) return s.importClause !== undefined && (!verbatimModuleSyntax || s.importClause.phaseModifier === ts.SyntaxKind.TypeKeyword)
+    if (ts.isExportDeclaration(s)) return s.isTypeOnly || (!verbatimModuleSyntax && s.exportClause !== undefined && ts.isNamedExports(s.exportClause) && s.exportClause.elements.every((e) => e.isTypeOnly))
     const modifiers = ts.canHaveModifiers(s) ? (ts.getModifiers(s) ?? []) : []
     return modifiers.some((m) => m.kind === ts.SyntaxKind.DeclareKeyword) && !ts.isEnumDeclaration(s) && !ts.isVariableStatement(s)
   })

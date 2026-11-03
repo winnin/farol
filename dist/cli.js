@@ -237481,14 +237481,14 @@ function checkI18nAdditive(baseText, headText) {
   compareJson(base, head, "", problems);
   return { additive: problems.length === 0, problems };
 }
-function isTypeOnlyModule(file2, code2) {
+function isTypeOnlyModule(file2, code2, verbatimModuleSyntax) {
   if (!/\.(ts|tsx|mts|cts)$/.test(file2)) return false;
   const { sourceFile: sf, errors } = parseIsolated(file2, code2);
   if (errors.length > 0) return false;
   return sf.statements.every((s) => {
     if (import_typescript2.default.isInterfaceDeclaration(s) || import_typescript2.default.isTypeAliasDeclaration(s)) return true;
-    if (import_typescript2.default.isImportDeclaration(s)) return s.importClause !== void 0;
-    if (import_typescript2.default.isExportDeclaration(s)) return s.isTypeOnly || s.exportClause !== void 0 && import_typescript2.default.isNamedExports(s.exportClause) && s.exportClause.elements.every((e) => e.isTypeOnly);
+    if (import_typescript2.default.isImportDeclaration(s)) return s.importClause !== void 0 && (!verbatimModuleSyntax || s.importClause.phaseModifier === import_typescript2.default.SyntaxKind.TypeKeyword);
+    if (import_typescript2.default.isExportDeclaration(s)) return s.isTypeOnly || !verbatimModuleSyntax && s.exportClause !== void 0 && import_typescript2.default.isNamedExports(s.exportClause) && s.exportClause.elements.every((e) => e.isTypeOnly);
     const modifiers = import_typescript2.default.canHaveModifiers(s) ? import_typescript2.default.getModifiers(s) ?? [] : [];
     return modifiers.some((m) => m.kind === import_typescript2.default.SyntaxKind.DeclareKeyword) && !import_typescript2.default.isEnumDeclaration(s) && !import_typescript2.default.isVariableStatement(s);
   });
@@ -252500,7 +252500,8 @@ async function runAnalyze(ctx, options, deps) {
       const tsModified = files.filter((f) => f.status === "modified" && (roleOf(f.path) === "source" || entryFiles.has(f.path)) && /\.(ts|tsx|mts|cts)$/.test(f.path)).map((f) => f.path);
       const tsBase = await readFiles(ctx.repoRoot, mb, tsModified);
       const tsHead = await readFiles(ctx.repoRoot, meta3.head.sha, tsModified);
-      const typeOnlyFiles = new Set(tsModified.filter((p) => isTypeOnlyModule(p, tsBase.get(p) ?? "x") && isTypeOnlyModule(p, tsHead.get(p) ?? "x")));
+      const verbatim = ws.project.options.verbatimModuleSyntax === true;
+      const typeOnlyFiles = new Set(tsModified.filter((p) => isTypeOnlyModule(p, tsBase.get(p) ?? "x", verbatim) && isTypeOnlyModule(p, tsHead.get(p) ?? "x", verbatim)));
       const declChanged = ws.backend ? [] : files.filter((f) => f.status !== "renamed" && roleOf(f.path) === "source" && /\.(ts|tsx|mts|cts)$/.test(f.path) && !typeOnlyFiles.has(f.path));
       const declBaseText = await readFiles(ctx.repoRoot, mb, declChanged.filter((f) => f.status !== "added").map((f) => f.oldPath ?? f.path));
       const head = declChanged.length === 0 ? { module: "", files: [], decls: [], edges: [], entries: [], problems: [], comments: [] } : tsDeclGraph({ project: ws.project, repoRoot: toPosix(ctx.repoRoot), isOrigin: (p) => {

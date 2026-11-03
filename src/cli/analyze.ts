@@ -263,7 +263,8 @@ export async function runAnalyze(ctx: Context, options: AnalyzeOptions, deps: An
       const tsModified = files.filter((f) => f.status === 'modified' && (roleOf(f.path) === 'source' || entryFiles.has(f.path)) && /\.(ts|tsx|mts|cts)$/.test(f.path)).map((f) => f.path)
       const tsBase = await readFiles(ctx.repoRoot, mb, tsModified)
       const tsHead = await readFiles(ctx.repoRoot, meta.head.sha, tsModified)
-      const typeOnlyFiles = new Set(tsModified.filter((p) => isTypeOnlyModule(p, tsBase.get(p) ?? 'x') && isTypeOnlyModule(p, tsHead.get(p) ?? 'x')))
+      const verbatim = ws.project.options.verbatimModuleSyntax === true
+      const typeOnlyFiles = new Set(tsModified.filter((p) => isTypeOnlyModule(p, tsBase.get(p) ?? 'x', verbatim) && isTypeOnlyModule(p, tsHead.get(p) ?? 'x', verbatim)))
       // Declaration-level reach of changed TypeScript source files (renamed files keep the file graph: their
       // declaration ids change with the path). JavaScript keeps the file graph too: CommonJS and
       // globals (global.X = require(...)) are only followed there. Type-only files keep their own rule.

@@ -155,6 +155,21 @@ describe('entry points named in backend.entries', () => {
       expect(o.routes.affected).toEqual([])
     })
 
+    it.each([
+      ['runs the module of an inline type re-export under verbatimModuleSyntax', { verbatimModuleSyntax: true }, 'touches-existing'],
+      ['erases an inline type re-export otherwise', {}, 'isolated'],
+    ])('%s', async (_name, compilerOptions, classification) => {
+      const BARREL = 'src/jobs/index.ts'
+      const o = await pr((repo) => { repo.write(BARREL, "export { type A } from './a'\nexport { type B } from './b'\n") }, (repo) => {
+        entries({ JOB: [BARREL] })(repo)
+        repo.write('tsconfig.json', JSON.stringify({ compilerOptions: { module: 'esnext', moduleResolution: 'bundler', ...compilerOptions }, include: ['src'] }))
+        repo.write('src/jobs/a.ts', 'export type A = number\n')
+        repo.write('src/jobs/b.ts', 'export type B = number\n')
+        repo.write(BARREL, "export { type A } from './a'\n")
+      })
+      expect(o.classification).toBe(classification)
+    })
+
     it('changes nothing at runtime when the file is a barrel of types only', async () => {
       const BARREL = 'src/jobs/index.ts'
       const o = await pr((repo) => { repo.write(BARREL, "export type { A } from './a'\nexport type { B } from './b'\n") }, (repo) => {
