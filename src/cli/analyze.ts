@@ -241,7 +241,7 @@ export async function runAnalyze(ctx: Context, options: AnalyzeOptions, deps: An
         baseRoutes = routesBase === undefined ? null : await baseRouteTable(ctx, ws, mb, routesBase)
       }
       const manifests = await manifestDiffs(ctx, files, roleOf, mb, meta.head.sha)
-      const scriptModified = files.filter((f) => f.status === 'modified' && (roleOf(f.path) === 'source' || roleOf(f.path) === 'resolvers') && /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(f.path)).map((f) => f.path)
+      const scriptModified = files.filter((f) => f.status === 'modified' && ['source', 'resolvers', 'routes', 'barrel'].includes(roleOf(f.path)) && /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(f.path)).map((f) => f.path)
       const tsBase = await readFiles(ctx.repoRoot, mb, scriptModified)
       const tsHead = await readFiles(ctx.repoRoot, meta.head.sha, scriptModified)
       // Only comments or formatting changed: no reach, no risk (the code both versions run is the same).

@@ -187,22 +187,50 @@ export function isTypeOnlyModule(file: string, code: string): boolean {
 }
 
 const SCRIPT_FILE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/
-/** Comments that change emitted or bundled code, with their values: JSX pragmas, pure annotations, bundler hints. */
-const CODE_COMMENTS = /@jsx(?:ImportSource|Runtime|Frag)?\s+[^\s*]+|@jsx\b|[#@]__(?:PURE|NO_SIDE_EFFECTS)__|webpack[A-Z]\w*\s*:\s*[^,*]+|@vite-ignore/g
+/** Comments that change emitted or bundled code: JSX pragmas, pure annotations, bundler hints. */
+const CODE_COMMENT = /@jsx|[#@]__(?:PURE|NO_SIDE_EFFECTS)__|webpack[A-Z]|@vite-ignore/
 const PRINTER = ts.createPrinter({ removeComments: true })
+
+/**
+ * The comments of a file that change emitted or bundled code, each whole and with the index of the code token it sits
+ * before: the same marker before another call or import is a different comment.
+ */
+function codeComments(sf: ts.SourceFile): string[] {
+  const out: string[] = []
+  let index = 0
+  const visit = (node: ts.Node): void => {
+    const children = node.getChildren(sf)
+    if (children.length > 0) {
+      for (const child of children) visit(child)
+      return
+    }
+    // Comments between the previous token and this one: on the previous token's line (trailing) or below it (leading).
+    const start = node.getFullStart()
+    const ranges = [...(ts.getTrailingCommentRanges(sf.text, start) ?? []), ...(ts.getLeadingCommentRanges(sf.text, start) ?? [])]
+    for (const pos of new Set(ranges.map((r) => r.pos))) {
+      const r = ranges.find((x) => x.pos === pos)
+      const text = r === undefined ? '' : sf.text.slice(r.pos, r.end)
+      if (CODE_COMMENT.test(text)) out.push(`${index}\u0000${text}`)
+    }
+    index++
+  }
+  visit(sf)
+  return out
+}
 
 /**
  * Whether a JS/TS file changed only in comments or formatting: both versions print the same with the TypeScript printer
  * (comments removed, layout normalized; JSX text stays text), and the comments that change emitted or bundled code are
- * the same. A file that does not parse is never comments-only.
+ * the same, in the same places. A file that does not parse is never comments-only.
  */
 export function isCommentsOnlyChange(file: string, base: string, head: string): boolean {
   if (!SCRIPT_FILE.test(file)) return false
-  const print = (code: string): string | null => {
+  const parse = (code: string): ts.SourceFile | null => {
     const { sourceFile, errors } = parseIsolated(file, code)
-    return errors.length > 0 ? null : PRINTER.printFile(sourceFile)
+    return errors.length > 0 ? null : sourceFile
   }
-  const before = print(base)
-  if (before === null || before !== print(head)) return false
-  return isDeepStrictEqual(base.match(CODE_COMMENTS) ?? [], head.match(CODE_COMMENTS) ?? [])
+  const before = parse(base)
+  const after = parse(head)
+  if (before === null || after === null || PRINTER.printFile(before) !== PRINTER.printFile(after)) return false
+  return isDeepStrictEqual(codeComments(before), codeComments(after))
 }

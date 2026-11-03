@@ -65,6 +65,16 @@ const SCENARIOS: Record<string, { classification: Output['classification']; chec
       expect(scoreItems(o).filter((i) => i.file === 'src/components/Card.tsx')).toEqual([])
     },
   },
+  // Only comments changed in the routes file and in a barrel: their role rules do not run, and they add no risk.
+  '23-comments-only-routes-barrel': {
+    classification: 'isolated',
+    check: (o) => {
+      expect(o.routes.affected).toEqual([])
+      expect(o.files.filter((f) => f.commentsOnly === true).map((f) => f.path)).toEqual(['src/components/index.ts', 'src/routes.tsx'])
+      expect(o.reasons.filter((r) => r.code !== 'no-existing-code-touched').map((r) => r.code)).toEqual(['declarations-additive', 'declarations-additive'])
+      expect(scoreItems(o)).toEqual([])
+    },
+  },
 }
 
 const cleanups: (() => void)[] = []

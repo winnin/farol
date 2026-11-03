@@ -18,6 +18,12 @@ describe('comments-only changes', () => {
     expect(isCommentsOnlyChange('C.tsx', '/** @jsxImportSource react */\nexport const C = () => <p />\n', '/** @jsxImportSource preact */\nexport const C = () => <p />\n')).toBe(false)
     expect(isCommentsOnlyChange('a.ts', 'export const x = make()\n', 'export const x = /* #__PURE__ */ make()\n')).toBe(false)
     expect(isCommentsOnlyChange('a.ts', "const m = import('./m')\n", "const m = import(/* webpackChunkName: 'm' */ './m')\n")).toBe(false)
+    // The whole comment counts (a chunk name with a comma or a space), and where it sits.
+    expect(isCommentsOnlyChange('a.ts', "import(/* webpackChunkName: 'a,b' */ './m')\n", "import(/* webpackChunkName: 'a,c' */ './m')\n")).toBe(false)
+    expect(isCommentsOnlyChange('a.ts', "import(/* webpackChunkName: 'chunk one' */ './m')\n", "import(/* webpackChunkName: 'chunk two' */ './m')\n")).toBe(false)
+    expect(isCommentsOnlyChange('a.ts', 'export const x = /* #__PURE__ */ a()\nexport const y = b()\n', 'export const x = a()\nexport const y = /* #__PURE__ */ b()\n')).toBe(false)
+    // An ordinary comment next to a marker can change freely.
+    expect(isCommentsOnlyChange('a.ts', '// old note\nexport const x = /* #__PURE__ */ a()\n', '// new note\nexport const x = /* #__PURE__ */ a()\n')).toBe(true)
   })
 
   it('is never true for a file that does not parse, or that is not a script', () => {
