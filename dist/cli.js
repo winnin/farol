@@ -237146,9 +237146,8 @@ function routeSegment(route) {
   return route.entry === null ? "(layout)" : `(layout:${route.entry})`;
 }
 
-// src/classify/additive.ts
+// src/classify/declarations-only.ts
 var import_typescript2 = __toESM(require_typescript(), 1);
-import { isDeepStrictEqual } from "util";
 
 // src/project/parse.ts
 var import_typescript = __toESM(require_typescript(), 1);
@@ -237177,7 +237176,53 @@ function parseIsolated(fileName, code2) {
   return { sourceFile, errors };
 }
 
+// src/classify/declarations-only.ts
+var SCRIPT = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
+var isScriptFile = (file2) => SCRIPT.test(file2);
+function isStaticValue(e, depth = 0, calls = true) {
+  if (depth > 20) return false;
+  const value = (x) => isStaticValue(x, depth + 1, calls);
+  if (import_typescript2.default.isArrowFunction(e)) return !import_typescript2.default.isBlock(e.body) && value(e.body);
+  if (import_typescript2.default.isCallExpression(e)) return calls && (import_typescript2.default.isIdentifier(e.expression) || import_typescript2.default.isPropertyAccessExpression(e.expression)) && value(e.expression) && e.arguments.length > 0 && e.arguments.every((a) => !import_typescript2.default.isSpreadElement(a) && isStaticValue(a, depth + 1, false));
+  if (import_typescript2.default.isStringLiteral(e) || import_typescript2.default.isNumericLiteral(e) || import_typescript2.default.isNoSubstitutionTemplateLiteral(e) || import_typescript2.default.isBigIntLiteral(e) || import_typescript2.default.isRegularExpressionLiteral(e)) return true;
+  if (e.kind === import_typescript2.default.SyntaxKind.TrueKeyword || e.kind === import_typescript2.default.SyntaxKind.FalseKeyword || e.kind === import_typescript2.default.SyntaxKind.NullKeyword) return true;
+  if (import_typescript2.default.isIdentifier(e) || import_typescript2.default.isPropertyAccessExpression(e)) return import_typescript2.default.isIdentifier(e) || value(e.expression);
+  if (import_typescript2.default.isPrefixUnaryExpression(e)) return (e.operator === import_typescript2.default.SyntaxKind.MinusToken || e.operator === import_typescript2.default.SyntaxKind.PlusToken) && value(e.operand);
+  if (import_typescript2.default.isParenthesizedExpression(e) || import_typescript2.default.isAsExpression(e) || import_typescript2.default.isSatisfiesExpression(e) || import_typescript2.default.isTypeAssertionExpression(e)) return value(e.expression);
+  if (import_typescript2.default.isTemplateExpression(e)) return e.templateSpans.every((s) => value(s.expression));
+  if (import_typescript2.default.isArrayLiteralExpression(e)) return e.elements.every((x) => import_typescript2.default.isSpreadElement(x) ? value(x.expression) : value(x));
+  if (import_typescript2.default.isObjectLiteralExpression(e)) {
+    return e.properties.every((p) => {
+      if (import_typescript2.default.isPropertyAssignment(p)) return (!import_typescript2.default.isComputedPropertyName(p.name) || value(p.name.expression)) && value(p.initializer);
+      if (import_typescript2.default.isShorthandPropertyAssignment(p)) return true;
+      if (import_typescript2.default.isSpreadAssignment(p)) return value(p.expression);
+      return false;
+    });
+  }
+  return false;
+}
+function isDeclarationsOnlyModule(file2, code2) {
+  if (!SCRIPT.test(file2) || file2.endsWith(".test.ts")) return false;
+  const { sourceFile: sf, errors } = parseIsolated(file2, code2);
+  if (errors.length > 0) return false;
+  return sf.statements.every((s) => {
+    if (import_typescript2.default.isInterfaceDeclaration(s) || import_typescript2.default.isTypeAliasDeclaration(s) || import_typescript2.default.isEnumDeclaration(s)) return true;
+    if (import_typescript2.default.isImportDeclaration(s)) return s.importClause !== void 0;
+    if (import_typescript2.default.isExportDeclaration(s)) return true;
+    if (import_typescript2.default.isExportAssignment(s)) return isStaticValue(s.expression);
+    const modifiers = import_typescript2.default.canHaveModifiers(s) ? import_typescript2.default.getModifiers(s) ?? [] : [];
+    if (modifiers.some((m) => m.kind === import_typescript2.default.SyntaxKind.DeclareKeyword)) return true;
+    if (import_typescript2.default.isVariableStatement(s)) {
+      const isConst = (s.declarationList.flags & import_typescript2.default.NodeFlags.Const) !== 0;
+      return isConst && s.declarationList.declarations.every((d) => d.initializer !== void 0 && import_typescript2.default.isIdentifier(d.name) && isStaticValue(d.initializer));
+    }
+    return false;
+  });
+}
+
 // src/classify/additive.ts
+var import_typescript3 = __toESM(require_typescript(), 1);
+import { isDeepStrictEqual } from "util";
 function sameSignature(a, b) {
   return a.entry === b.entry && isDeepStrictEqual(a.layouts, b.layouts) && isDeepStrictEqual(a.modules, b.modules);
 }
@@ -237205,7 +237250,7 @@ function compareRouteTables(base, head) {
 function importBindings(sf) {
   const result = /* @__PURE__ */ new Map();
   for (const statement of sf.statements) {
-    if (!import_typescript2.default.isImportDeclaration(statement) || !import_typescript2.default.isStringLiteral(statement.moduleSpecifier)) continue;
+    if (!import_typescript3.default.isImportDeclaration(statement) || !import_typescript3.default.isStringLiteral(statement.moduleSpecifier)) continue;
     const set2 = result.get(statement.moduleSpecifier.text) ?? /* @__PURE__ */ new Set();
     result.set(statement.moduleSpecifier.text, set2);
     for (const b of declarationBindings(statement)) set2.add(b);
@@ -237218,8 +237263,8 @@ function declarationBindings(decl) {
   const bindings = [];
   if (clause.name) bindings.push(`default as ${clause.name.text}`);
   const named = clause.namedBindings;
-  if (named && import_typescript2.default.isNamespaceImport(named)) bindings.push(`* as ${named.name.text}`);
-  if (named && import_typescript2.default.isNamedImports(named)) for (const el of named.elements) bindings.push(`${(el.propertyName ?? el.name).text} as ${el.name.text}`);
+  if (named && import_typescript3.default.isNamespaceImport(named)) bindings.push(`* as ${named.name.text}`);
+  if (named && import_typescript3.default.isNamedImports(named)) for (const el of named.elements) bindings.push(`${(el.propertyName ?? el.name).text} as ${el.name.text}`);
   return bindings;
 }
 function unexplainedRemovedLines(file2, baseCode, headCode, removed) {
@@ -237230,7 +237275,7 @@ function unexplainedRemovedLines(file2, baseCode, headCode, removed) {
   const headImports = importBindings(head.sourceFile);
   const explained = /* @__PURE__ */ new Set();
   for (const statement of base.sourceFile.statements) {
-    if (!import_typescript2.default.isImportDeclaration(statement) || !import_typescript2.default.isStringLiteral(statement.moduleSpecifier)) continue;
+    if (!import_typescript3.default.isImportDeclaration(statement) || !import_typescript3.default.isStringLiteral(statement.moduleSpecifier)) continue;
     const headSet = headImports.get(statement.moduleSpecifier.text);
     if (!headSet || !declarationBindings(statement).every((b) => headSet.has(b))) continue;
     const first = base.sourceFile.getLineAndCharacterOfPosition(statement.getStart(base.sourceFile)).line + 1;
@@ -237243,10 +237288,10 @@ function normalizedText(node2, sf) {
   return node2.getText(sf).replace(/\s+/g, " ").trim();
 }
 function exportBindings(statement) {
-  const from = statement.moduleSpecifier && import_typescript2.default.isStringLiteral(statement.moduleSpecifier) ? statement.moduleSpecifier.text : "";
+  const from = statement.moduleSpecifier && import_typescript3.default.isStringLiteral(statement.moduleSpecifier) ? statement.moduleSpecifier.text : "";
   const clause = statement.exportClause;
   if (!clause) return [`${statement.isTypeOnly ? "type " : ""}${from}:*`];
-  if (import_typescript2.default.isNamespaceExport(clause)) return [`${statement.isTypeOnly ? "type " : ""}${from}:* as ${clause.name.text}`];
+  if (import_typescript3.default.isNamespaceExport(clause)) return [`${statement.isTypeOnly ? "type " : ""}${from}:* as ${clause.name.text}`];
   return clause.elements.map((el) => `${statement.isTypeOnly || el.isTypeOnly ? "type " : ""}${from}:${(el.propertyName ?? el.name).text} as ${el.name.text}`);
 }
 function checkBarrelAdditive(file2, baseCode, headCode) {
@@ -237256,14 +237301,14 @@ function checkBarrelAdditive(file2, baseCode, headCode) {
   if (base.errors.length > 0) problems.push(`the base version does not parse: ${base.errors[0]?.message ?? ""}`);
   if (head.errors.length > 0) problems.push(`the head version does not parse: ${head.errors[0]?.message ?? ""}`);
   if (problems.length > 0) return { additive: false, problems };
-  const baseOther = base.sourceFile.statements.find((s) => !import_typescript2.default.isExportDeclaration(s));
-  const headOther = head.sourceFile.statements.find((s) => !import_typescript2.default.isExportDeclaration(s));
+  const baseOther = base.sourceFile.statements.find((s) => !import_typescript3.default.isExportDeclaration(s));
+  const headOther = head.sourceFile.statements.find((s) => !import_typescript3.default.isExportDeclaration(s));
   const versions = baseOther && headOther ? "the file contains" : baseOther ? "the base version contains" : "the head version contains";
   const other = headOther ? normalizedText(headOther, head.sourceFile) : baseOther ? normalizedText(baseOther, base.sourceFile) : void 0;
   if (other !== void 0) problems.push(`${versions} a statement that is not an export declaration (not a pure barrel): "${other.slice(0, 80)}"`);
-  const headBindings = new Set(head.sourceFile.statements.flatMap((s) => import_typescript2.default.isExportDeclaration(s) ? exportBindings(s) : []));
+  const headBindings = new Set(head.sourceFile.statements.flatMap((s) => import_typescript3.default.isExportDeclaration(s) ? exportBindings(s) : []));
   for (const s of base.sourceFile.statements) {
-    if (import_typescript2.default.isExportDeclaration(s) && !exportBindings(s).every((b) => headBindings.has(b))) problems.push(`export removed or changed: "${normalizedText(s, base.sourceFile)}"`);
+    if (import_typescript3.default.isExportDeclaration(s) && !exportBindings(s).every((b) => headBindings.has(b))) problems.push(`export removed or changed: "${normalizedText(s, base.sourceFile)}"`);
   }
   return { additive: problems.length === 0, problems };
 }
@@ -237306,16 +237351,16 @@ function isTypeOnlyModule(file2, code2) {
   const { sourceFile: sf, errors } = parseIsolated(file2, code2);
   if (errors.length > 0) return false;
   return sf.statements.every((s) => {
-    if (import_typescript2.default.isInterfaceDeclaration(s) || import_typescript2.default.isTypeAliasDeclaration(s)) return true;
-    if (import_typescript2.default.isImportDeclaration(s)) return s.importClause !== void 0;
-    if (import_typescript2.default.isExportDeclaration(s)) return s.isTypeOnly || s.exportClause !== void 0 && import_typescript2.default.isNamedExports(s.exportClause) && s.exportClause.elements.every((e) => e.isTypeOnly);
-    const modifiers = import_typescript2.default.canHaveModifiers(s) ? import_typescript2.default.getModifiers(s) ?? [] : [];
-    return modifiers.some((m) => m.kind === import_typescript2.default.SyntaxKind.DeclareKeyword) && !import_typescript2.default.isEnumDeclaration(s) && !import_typescript2.default.isVariableStatement(s);
+    if (import_typescript3.default.isInterfaceDeclaration(s) || import_typescript3.default.isTypeAliasDeclaration(s)) return true;
+    if (import_typescript3.default.isImportDeclaration(s)) return s.importClause !== void 0;
+    if (import_typescript3.default.isExportDeclaration(s)) return s.isTypeOnly || s.exportClause !== void 0 && import_typescript3.default.isNamedExports(s.exportClause) && s.exportClause.elements.every((e) => e.isTypeOnly);
+    const modifiers = import_typescript3.default.canHaveModifiers(s) ? import_typescript3.default.getModifiers(s) ?? [] : [];
+    return modifiers.some((m) => m.kind === import_typescript3.default.SyntaxKind.DeclareKeyword) && !import_typescript3.default.isEnumDeclaration(s) && !import_typescript3.default.isVariableStatement(s);
   });
 }
 var SCRIPT_FILE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
 var CODE_COMMENT = /@jsx|[#@]__(?:PURE|NO_SIDE_EFFECTS)__|webpack[A-Z]|@vite-ignore/;
-var PRINTER = import_typescript2.default.createPrinter({ removeComments: true });
+var PRINTER = import_typescript3.default.createPrinter({ removeComments: true });
 function codeComments(sf) {
   const out = [];
   let index = 0;
@@ -237326,7 +237371,7 @@ function codeComments(sf) {
       return;
     }
     const start = node2.getFullStart();
-    const ranges = [...import_typescript2.default.getTrailingCommentRanges(sf.text, start) ?? [], ...import_typescript2.default.getLeadingCommentRanges(sf.text, start) ?? []];
+    const ranges = [...import_typescript3.default.getTrailingCommentRanges(sf.text, start) ?? [], ...import_typescript3.default.getLeadingCommentRanges(sf.text, start) ?? []];
     for (const pos of new Set(ranges.map((r) => r.pos))) {
       const r = ranges.find((x) => x.pos === pos);
       const text = r === void 0 ? "" : sf.text.slice(r.pos, r.end);
@@ -237784,7 +237829,9 @@ function classify(input2) {
       reasons.push(reason("declarations-additive", "only comments or formatting changed", file2.path));
       continue;
     }
-    const declImpact = role === "source" ? impactOf(file2.path) : void 0;
+    const sourceImpact = role === "source" ? impactOf(file2.path) : void 0;
+    const nothingDeclared = sourceImpact !== void 0 && sourceImpact.additive && sourceImpact.addedOperations.length === 0 && sourceImpact.added.length === 0 && (sourceImpact.erased?.length ?? 0) === 0;
+    const declImpact = nothingDeclared && isScriptFile(file2.path) ? void 0 : sourceImpact;
     if (declImpact) {
       out.additive = declImpact.additive;
       if (declImpact.additive) {
@@ -238499,7 +238546,7 @@ function createTreeFileSystem(options) {
 }
 
 // src/project/resolve.ts
-var import_typescript3 = __toESM(require_typescript(), 1);
+var import_typescript4 = __toESM(require_typescript(), 1);
 import { posix as posix4 } from "path";
 function createResolverContext(input2) {
   const fs2 = input2.fs;
@@ -238517,7 +238564,7 @@ function createResolverContext(input2) {
     options: input2.options,
     configPath: input2.configPath,
     resolutionHost,
-    resolutionCache: import_typescript3.default.createModuleResolutionCache(input2.projectDir, (f) => f, input2.options)
+    resolutionCache: import_typescript4.default.createModuleResolutionCache(input2.projectDir, (f) => f, input2.options)
   };
 }
 var TS_LIKE = /* @__PURE__ */ new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".json", ""]);
@@ -238575,7 +238622,7 @@ function isInRepo(file2, repoRoot2) {
 }
 function resolveSpecifier(project, repoRoot2, containingFile, specifier, mode) {
   const cleaned = specifier.split("?")[0]?.split("#")[0] ?? specifier;
-  const result = import_typescript3.default.resolveModuleName(cleaned, containingFile, project.options, project.resolutionHost, project.resolutionCache, void 0, mode);
+  const result = import_typescript4.default.resolveModuleName(cleaned, containingFile, project.options, project.resolutionHost, project.resolutionCache, void 0, mode);
   const resolved = result.resolvedModule;
   if (resolved) {
     const file2 = toPosix(project.fs.realpath(resolved.resolvedFileName));
@@ -238931,51 +238978,6 @@ function parseGovulncheckReport(text) {
     if (!current || (rank[advisory.severity] ?? 9) < (rank[current.severity] ?? 9)) best.set(key, advisory);
   }
   return { advisories: [...best.values()].sort((a, b) => compareStrings(a.id, b.id) || compareStrings(a.package, b.package)), dependsOn: /* @__PURE__ */ new Map() };
-}
-
-// src/classify/declarations-only.ts
-var import_typescript4 = __toESM(require_typescript(), 1);
-var SCRIPT = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
-var isScriptFile = (file2) => SCRIPT.test(file2);
-function isStaticValue(e, depth = 0, calls = true) {
-  if (depth > 20) return false;
-  const value = (x) => isStaticValue(x, depth + 1, calls);
-  if (import_typescript4.default.isArrowFunction(e)) return !import_typescript4.default.isBlock(e.body) && value(e.body);
-  if (import_typescript4.default.isCallExpression(e)) return calls && (import_typescript4.default.isIdentifier(e.expression) || import_typescript4.default.isPropertyAccessExpression(e.expression)) && value(e.expression) && e.arguments.length > 0 && e.arguments.every((a) => !import_typescript4.default.isSpreadElement(a) && isStaticValue(a, depth + 1, false));
-  if (import_typescript4.default.isStringLiteral(e) || import_typescript4.default.isNumericLiteral(e) || import_typescript4.default.isNoSubstitutionTemplateLiteral(e) || import_typescript4.default.isBigIntLiteral(e) || import_typescript4.default.isRegularExpressionLiteral(e)) return true;
-  if (e.kind === import_typescript4.default.SyntaxKind.TrueKeyword || e.kind === import_typescript4.default.SyntaxKind.FalseKeyword || e.kind === import_typescript4.default.SyntaxKind.NullKeyword) return true;
-  if (import_typescript4.default.isIdentifier(e) || import_typescript4.default.isPropertyAccessExpression(e)) return import_typescript4.default.isIdentifier(e) || value(e.expression);
-  if (import_typescript4.default.isPrefixUnaryExpression(e)) return (e.operator === import_typescript4.default.SyntaxKind.MinusToken || e.operator === import_typescript4.default.SyntaxKind.PlusToken) && value(e.operand);
-  if (import_typescript4.default.isParenthesizedExpression(e) || import_typescript4.default.isAsExpression(e) || import_typescript4.default.isSatisfiesExpression(e) || import_typescript4.default.isTypeAssertionExpression(e)) return value(e.expression);
-  if (import_typescript4.default.isTemplateExpression(e)) return e.templateSpans.every((s) => value(s.expression));
-  if (import_typescript4.default.isArrayLiteralExpression(e)) return e.elements.every((x) => import_typescript4.default.isSpreadElement(x) ? value(x.expression) : value(x));
-  if (import_typescript4.default.isObjectLiteralExpression(e)) {
-    return e.properties.every((p) => {
-      if (import_typescript4.default.isPropertyAssignment(p)) return (!import_typescript4.default.isComputedPropertyName(p.name) || value(p.name.expression)) && value(p.initializer);
-      if (import_typescript4.default.isShorthandPropertyAssignment(p)) return true;
-      if (import_typescript4.default.isSpreadAssignment(p)) return value(p.expression);
-      return false;
-    });
-  }
-  return false;
-}
-function isDeclarationsOnlyModule(file2, code2) {
-  if (!SCRIPT.test(file2) || file2.endsWith(".test.ts")) return false;
-  const { sourceFile: sf, errors } = parseIsolated(file2, code2);
-  if (errors.length > 0) return false;
-  return sf.statements.every((s) => {
-    if (import_typescript4.default.isInterfaceDeclaration(s) || import_typescript4.default.isTypeAliasDeclaration(s) || import_typescript4.default.isEnumDeclaration(s)) return true;
-    if (import_typescript4.default.isImportDeclaration(s)) return s.importClause !== void 0;
-    if (import_typescript4.default.isExportDeclaration(s)) return true;
-    if (import_typescript4.default.isExportAssignment(s)) return isStaticValue(s.expression);
-    const modifiers = import_typescript4.default.canHaveModifiers(s) ? import_typescript4.default.getModifiers(s) ?? [] : [];
-    if (modifiers.some((m) => m.kind === import_typescript4.default.SyntaxKind.DeclareKeyword)) return true;
-    if (import_typescript4.default.isVariableStatement(s)) {
-      const isConst = (s.declarationList.flags & import_typescript4.default.NodeFlags.Const) !== 0;
-      return isConst && s.declarationList.declarations.every((d) => d.initializer !== void 0 && import_typescript4.default.isIdentifier(d.name) && isStaticValue(d.initializer));
-    }
-    return false;
-  });
 }
 
 // src/signals/audit.ts

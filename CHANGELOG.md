@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **Comments and formatting are not risk.** A modified TypeScript/JavaScript file whose code prints the same without comments (TypeScript printer) is `declarations-additive` with no reach, like Go and Python files already were, and every comments-only file (`commentsOnly` in the JSON) adds nothing to the merge risk. Comments that change emitted or bundled code (`@jsxImportSource`, `#__PURE__`, `webpackChunkName`) still count as code. Found on a contributor's PR, where two files with only doc comments changed weighed 12 points.
+- **TypeScript: an import that points to another module is a change.** A file whose declarations stay the same but whose imports changed (`from './a'` → `from './b'`) was read as "only comments or formatting changed"; it is now an existing file modified, with the pages that run it.
 
 ## 0.2.1 — 2026-10-26
 

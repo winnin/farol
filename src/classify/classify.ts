@@ -5,6 +5,7 @@ import type { AddedRoute, AffectedRoute, Dependencies, OutputFile, UnresolvedImp
 import type { ImportGraph, ParseError } from '../project/graph.js'
 import { KEY_SEPARATOR } from '../routes/paths.js'
 import type { DynamicRoute, RouteEntry, RouteTable } from '../routes/types.js'
+import { isScriptFile } from './declarations-only.js'
 import { checkBarrelAdditive, checkI18nAdditive, compareRouteTables, JsonParseError, unexplainedRemovedLines } from './additive.js'
 import { createReachIndex, reachFrom, routesReaching, type ReachIndex } from './reach.js'
 import { classificationFrom, reason, REASONS, sortReasons, type Classification, type Reason } from './reasons.js'
@@ -241,7 +242,11 @@ export function classify(input: ClassifyInput): ClassifyResult {
       continue
     }
     // Modified existing file: only routes, barrel and i18n files can be additive.
-    const declImpact = role === 'source' ? impactOf(file.path) : undefined
+    const sourceImpact = role === 'source' ? impactOf(file.path) : undefined
+    // TypeScript declarations leave imports out: nothing added or changed is no proof that nothing changed (a file can
+    // swap an import for another module). Only the printer check above proves comments-only; such a file is read whole.
+    const nothingDeclared = sourceImpact !== undefined && sourceImpact.additive && sourceImpact.addedOperations.length === 0 && sourceImpact.added.length === 0 && (sourceImpact.erased?.length ?? 0) === 0
+    const declImpact = nothingDeclared && isScriptFile(file.path) ? undefined : sourceImpact
     if (declImpact) {
       // Declaration-level impact (Go): only changed or removed declarations count, with the entry points they reach.
       out.additive = declImpact.additive

@@ -75,6 +75,18 @@ const SCENARIOS: Record<string, { classification: Output['classification']; chec
       expect(scoreItems(o)).toEqual([])
     },
   },
+  // HomePage now imports Card from another module: no declaration of HomePage changed (the declaration graph leaves
+  // imports out), but the page runs different code. It is a modification, never comments-only.
+  '24-import-swapped': {
+    classification: 'touches-existing',
+    check: (o) => {
+      const page = o.files.find((f) => f.path === 'src/pages/HomePage.tsx')
+      expect(page?.commentsOnly).toBeUndefined()
+      expect(o.reasons.filter((r) => r.file === 'src/pages/HomePage.tsx').map((r) => r.code)).toEqual(['existing-file-modified'])
+      expect(o.routes.affected.map((r) => r.path)).toContain('/')
+      expect(scoreItems(o).some((i) => i.file === 'src/pages/HomePage.tsx')).toBe(true)
+    },
+  },
 }
 
 const cleanups: (() => void)[] = []
