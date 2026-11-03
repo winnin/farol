@@ -15,7 +15,7 @@ import { buildSchemaGraph, operationsOf, parseSdl, sdlSources, type SdlProblem }
 
 /** The entry points of a backend, in the same shape as a route table: one entry per operation or endpoint. */
 export interface BackendTable {
-  /** GraphQL root operations and REST endpoints; `modules` are the modules their resolvers use. */
+  /** GraphQL root operations, REST endpoints and `backend.entries`; `modules` are the modules they use. */
   operations: RouteEntry[]
   /**
    * For each operation, the resolver keys it can run (its own and those of every type it can return). REST endpoints
@@ -26,6 +26,8 @@ export interface BackendTable {
   operationTypes: Map<string, Set<string>>
   /** Root operation type names. */
   rootTypes: Set<string>
+  /** Entry point keys named in `backend.entries`, with their files. */
+  configEntries: ReadonlyMap<string, string>
   /** Every type name of the schema (to recognize resolver maps). */
   typeNames: Set<string>
   /** Fields of each type: a resolver map member must name a real field. */
@@ -68,6 +70,23 @@ export interface BackendInput {
   rest: boolean
   /** Context properties → provider file globs (repo-relative). */
   context: Readonly<Record<string, readonly string[]>>
+  /** Entry point kinds → globs of the files that are entry points (repo-relative). */
+  entries: Readonly<Record<string, readonly string[]>>
+}
+
+/** An import or re-export runs nothing the import graph does not already follow; naming a class in one is not a use. */
+const runsCode = (statement: ts.Statement): boolean => !ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)
+
+/** Each program file a glob of `backend.entries` matches is one entry point, which runs the modules the file names. */
+function configuredEntries(byKind: BackendInput['entries'], programFiles: readonly ts.SourceFile[], rel: (fileName: string) => string, anchorsOf: (node: ts.Node) => string[]): (RouteEntry & { entry: string })[] {
+  return Object.entries(byKind).flatMap(([kind, globs]) => {
+    const match = picomatch([...globs], { dot: true })
+    return programFiles.filter((sf) => match(rel(sf.fileName))).map((sf) => {
+      const file = rel(sf.fileName)
+      const key = `${kind} ${file}`
+      return { key, path: key, index: false, entry: file, modules: sortedUnique(sf.statements.filter(runsCode).flatMap(anchorsOf)).filter((m) => m !== file), layouts: [] }
+    })
+  })
 }
 
 export function buildBackendTable(input: BackendInput): BackendTable {
@@ -210,9 +229,12 @@ export function buildBackendTable(input: BackendInput): BackendTable {
     const installed = honoKeys.has(key) ? registrations.filter((reg) => reg.paths.some((p) => underPath(keyPath(key), p))).flatMap((reg) => reg.modules) : []
     entries.push({ key, path: key, index: false, entry: null, modules: sortedUnique([...[...ids].flatMap((id) => [...(anchors.get(id)?.modules ?? [])]), ...installed]), layouts: [] })
   }
+  const configured = configuredEntries(input.entries, programFiles, rel, anchorsOf)
+  entries.push(...configured)
   entries.sort((a, b) => compareStrings(a.key, b.key))
   return {
     operations: entries,
+    configEntries: new Map(configured.map((e) => [e.key, e.entry])),
     resolverKeys,
     operationTypes,
     rootTypes: new Set(Object.values(schema.roots)),

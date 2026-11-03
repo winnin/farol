@@ -212097,7 +212097,7 @@ var require_scan = __commonJS({
       }
       let base = str2;
       let prefix = "";
-      let glob = "";
+      let glob2 = "";
       if (start > 0) {
         prefix = str2.slice(0, start);
         str2 = str2.slice(start);
@@ -212105,10 +212105,10 @@ var require_scan = __commonJS({
       }
       if (base && isGlob === true && lastIndex > 0) {
         base = str2.slice(0, lastIndex);
-        glob = str2.slice(lastIndex);
+        glob2 = str2.slice(lastIndex);
       } else if (isGlob === true) {
         base = "";
-        glob = str2;
+        glob2 = str2;
       } else {
         base = str2;
       }
@@ -212118,7 +212118,7 @@ var require_scan = __commonJS({
         }
       }
       if (opts.unescape === true) {
-        if (glob) glob = utils.removeBackslashes(glob);
+        if (glob2) glob2 = utils.removeBackslashes(glob2);
         if (base && backslashes === true) {
           base = utils.removeBackslashes(base);
         }
@@ -212128,7 +212128,7 @@ var require_scan = __commonJS({
         input: input2,
         start,
         base,
-        glob,
+        glob: glob2,
         isBrace,
         isBracket,
         isGlob,
@@ -213206,9 +213206,9 @@ var require_picomatch = __commonJS({
     var utils = require_utils();
     var constants = require_constants();
     var isObject2 = (val) => val && typeof val === "object" && !Array.isArray(val);
-    var picomatch4 = (glob, options, returnState = false) => {
-      if (Array.isArray(glob)) {
-        const fns = glob.map((input2) => picomatch4(input2, options, returnState));
+    var picomatch4 = (glob2, options, returnState = false) => {
+      if (Array.isArray(glob2)) {
+        const fns = glob2.map((input2) => picomatch4(input2, options, returnState));
         const arrayMatcher = (str2) => {
           for (const isMatch of fns) {
             const state2 = isMatch(str2);
@@ -213218,13 +213218,13 @@ var require_picomatch = __commonJS({
         };
         return arrayMatcher;
       }
-      const isState = isObject2(glob) && glob.tokens && glob.input;
-      if (glob === "" || typeof glob !== "string" && !isState) {
+      const isState = isObject2(glob2) && glob2.tokens && glob2.input;
+      if (glob2 === "" || typeof glob2 !== "string" && !isState) {
         throw new TypeError("Expected pattern to be a non-empty string");
       }
       const opts = options || {};
       const posix21 = opts.windows;
-      const regex = isState ? picomatch4.compileRe(glob, options) : picomatch4.makeRe(glob, options, false, true);
+      const regex = isState ? picomatch4.compileRe(glob2, options) : picomatch4.makeRe(glob2, options, false, true);
       const state = regex.state;
       delete regex.state;
       let isIgnored = () => false;
@@ -213233,8 +213233,8 @@ var require_picomatch = __commonJS({
         isIgnored = picomatch4(opts.ignore, ignoreOpts, returnState);
       }
       const matcher2 = (input2, returnObject = false) => {
-        const { isMatch, match, output: output2 } = picomatch4.test(input2, regex, options, { glob, posix: posix21 });
-        const result = { glob, state, regex, posix: posix21, input: input2, output: output2, match, isMatch };
+        const { isMatch, match, output: output2 } = picomatch4.test(input2, regex, options, { glob: glob2, posix: posix21 });
+        const result = { glob: glob2, state, regex, posix: posix21, input: input2, output: output2, match, isMatch };
         if (typeof opts.onResult === "function") {
           opts.onResult(result);
         }
@@ -213259,7 +213259,7 @@ var require_picomatch = __commonJS({
       }
       return matcher2;
     };
-    picomatch4.test = (input2, regex, options, { glob, posix: posix21 } = {}) => {
+    picomatch4.test = (input2, regex, options, { glob: glob2, posix: posix21 } = {}) => {
       if (typeof input2 !== "string") {
         throw new TypeError("Expected input to be a string");
       }
@@ -213268,11 +213268,11 @@ var require_picomatch = __commonJS({
       }
       const opts = options || {};
       const format = opts.format || (posix21 ? utils.toPosixSlashes : null);
-      let match = input2 === glob;
+      let match = input2 === glob2;
       let output2 = match && format ? format(input2) : input2;
       if (match === false) {
         output2 = format ? format(input2) : input2;
-        match = output2 === glob;
+        match = output2 === glob2;
       }
       if (match === false || opts.capture === true) {
         if (opts.matchBase === true || opts.basename === true) {
@@ -213283,8 +213283,8 @@ var require_picomatch = __commonJS({
       }
       return { isMatch: Boolean(match), match, output: output2 };
     };
-    picomatch4.matchBase = (input2, glob, options, posix21 = options && options.windows) => {
-      const regex = glob instanceof RegExp ? glob : picomatch4.makeRe(glob, options);
+    picomatch4.matchBase = (input2, glob2, options, posix21 = options && options.windows) => {
+      const regex = glob2 instanceof RegExp ? glob2 : picomatch4.makeRe(glob2, options);
       return regex.test(utils.basename(input2, { windows: posix21 }));
     };
     picomatch4.isMatch = (str2, patterns, options) => picomatch4(patterns, options)(str2);
@@ -213343,11 +213343,11 @@ var require_picomatch2 = __commonJS({
     "use strict";
     var pico = require_picomatch();
     var utils = require_utils();
-    function picomatch4(glob, options, returnState = false) {
+    function picomatch4(glob2, options, returnState = false) {
       if (options && (options.windows === null || options.windows === void 0)) {
         options = { ...options, windows: utils.isWindows() };
       }
-      return pico(glob, options, returnState);
+      return pico(glob2, options, returnState);
     }
     Object.assign(picomatch4, pico);
     module.exports = picomatch4;
@@ -236448,7 +236448,11 @@ function date4(params) {
 }
 
 // src/config/schema.ts
-var globs = external_exports.array(external_exports.string().min(1, "glob patterns cannot be empty"));
+var glob = external_exports.string().min(1, "glob patterns cannot be empty");
+var globs = external_exports.array(glob);
+var ENTRY_KINDS = ["JOB", "CONSUMER", "RPC", "RUN"];
+var isRelativePositive = (g) => (!g.startsWith("!") || g.startsWith("!(")) && !g.split(/[/{},]/).some((seg) => seg === "." || seg === "..");
+var entryGlob = glob.refine(isRelativePositive, 'write a positive glob relative to the project, with no "!", "./" or "../"');
 var DEFAULT_INFRA = [
   "**/.env",
   "**/.env.*",
@@ -236539,7 +236543,7 @@ var ConfigSchema = external_exports.object({
     /** Import roots, relative to the project: `src` for a src layout (`from orders_api import x` is src/orders_api/x.py). */
     roots: external_exports.array(external_exports.string().min(1)).min(1).default(["src", "."])
   }).strict().prefault({}),
-  /** frontend: React routes are the entry points; backend: GraphQL operations and REST endpoints are. */
+  /** frontend: React routes are the entry points; backend: GraphQL operations, REST endpoints and `backend.entries` are. */
   surface: external_exports.enum(["frontend", "backend"]).default("frontend"),
   tsconfig: external_exports.string().min(1).default("tsconfig.json"),
   backend: external_exports.object({
@@ -236552,7 +236556,13 @@ var ConfigSchema = external_exports.object({
      * that provide them, e.g. "loaders" → the loader registries of each module. A resolver reading `loaders.Brand…`
      * uses the provider file whose directory or name matches `Brand`, or every provider when none matches.
      */
-    context: external_exports.record(external_exports.string().min(1), globs).default({})
+    context: external_exports.record(external_exports.string().min(1), globs).default({}),
+    /**
+     * Files that run outside HTTP and GraphQL (Kafka handlers, cron jobs, gRPC services, scripts), by kind. Each
+     * matching file of the TypeScript program is one entry point, `<KIND> <repo-relative file>`, that runs the code
+     * the file uses.
+     */
+    entries: external_exports.partialRecord(external_exports.enum(ENTRY_KINDS), external_exports.array(entryGlob)).default({})
   }).strict().prefault({}),
   routes: external_exports.object({
     /** react-router: a route table in `file`. next, tanstack-router: file-system routing under `dir`. */
@@ -236600,6 +236610,7 @@ var ConfigSchema = external_exports.object({
 }).strict().superRefine((config2, ctx) => {
   if (config2.language !== "typescript" && config2.surface !== "backend") ctx.addIssue({ code: "custom", path: ["surface"], message: `a ${config2.language === "go" ? "Go" : "Python"} project is a backend: set "surface": "backend"` });
   if (config2.language !== "typescript" && config2.generated.length > 0) ctx.addIssue({ code: "custom", path: ["generated"], message: "only TypeScript projects read generated import targets: remove it" });
+  if ((config2.language !== "typescript" || config2.surface !== "backend") && Object.keys(config2.backend.entries).length > 0) ctx.addIssue({ code: "custom", path: ["backend", "entries"], message: "only TypeScript backends read entry points from the configuration" });
   if (config2.surface === "frontend" && config2.routes === void 0) ctx.addIssue({ code: "custom", path: ["routes"], message: 'routes is required for a frontend (routes.file for React Router, or routes.adapter "next" / "tanstack-router"), or set "surface": "backend"' });
 }).transform((config2) => ({
   ...config2,
@@ -237146,6 +237157,78 @@ function routeSegment(route) {
   return route.entry === null ? "(layout)" : `(layout:${route.entry})`;
 }
 
+// src/classify/reasons.ts
+var CLASSIFICATIONS = ["global", "unknown", "touches-existing", "isolated"];
+var REASONS = {
+  "global-file-changed": "global",
+  "manifest-changed": "global",
+  "dependency-critical": "global",
+  "lockfile-only-change": "global",
+  "analysis-error": "unknown",
+  "parse-error": "unknown",
+  "dynamic-route": "unknown",
+  "unresolved-import": "unknown",
+  "routes-not-additive": "touches-existing",
+  "schema-not-additive": "touches-existing",
+  "resolvers-not-additive": "touches-existing",
+  "barrel-not-additive": "touches-existing",
+  "i18n-not-additive": "touches-existing",
+  "existing-file-modified": "touches-existing",
+  "existing-file-unreachable": "touches-existing",
+  "existing-file-renamed": "touches-existing",
+  "existing-file-deleted": "touches-existing",
+  "infra-file-changed": "touches-existing",
+  "lockfile-changed-elsewhere": "touches-existing",
+  "new-file-reached-by-existing-route": "touches-existing",
+  "tests-modified": "info",
+  "type-only-change": "info",
+  "declarations-additive": "info",
+  "dependency-changed": "info",
+  "lockfile-changed": "info",
+  "route-added": "info",
+  "routes-additive": "info",
+  "schema-additive": "info",
+  "resolvers-additive": "info",
+  "barrel-additive": "info",
+  "i18n-additive": "info",
+  "new-file-in-new-route": "info",
+  "new-file-disconnected": "info",
+  "file-excluded": "info",
+  "outside-project": "info",
+  "no-existing-code-touched": "info"
+};
+var REASON_CODES = Object.keys(REASONS);
+function reason(code2, detail, file2) {
+  return file2 === void 0 ? { code: code2, detail } : { code: code2, file: file2, detail };
+}
+function classificationFrom(reasons) {
+  for (const cls of ["global", "unknown", "touches-existing"]) if (reasons.some((r) => REASONS[r.code] === cls)) return cls;
+  return "isolated";
+}
+var RANK = new Map(REASON_CODES.map((code2, i) => [code2, i]));
+function sortReasons(reasons) {
+  const unique = new Map(reasons.map((r) => [`${r.code}\0${r.file ?? ""}\0${r.detail}`, r]));
+  return [...unique.values()].sort((a, b) => (RANK.get(a.code) ?? 0) - (RANK.get(b.code) ?? 0) || compareStrings(a.file ?? "", b.file ?? "") || compareStrings(a.detail, b.detail));
+}
+
+// src/classify/entry-files.ts
+function editedEntryFiles(configEntries, files, existing, typeOnly = /* @__PURE__ */ new Set()) {
+  return existing.flatMap((route) => {
+    const path3 = configEntries.get(route.key);
+    const file2 = files.find((f) => f.path === path3 && f.status === "modified" && !typeOnly.has(f.path));
+    return file2 ? [{ route, file: file2 }] : [];
+  });
+}
+function markEdited({ route, file: file2 }, reasons) {
+  if (file2.additive) file2.additive = false;
+  const additive = reasons.filter((r) => r.file === file2.path && r.code.endsWith("-additive") && REASONS[r.code] === "info");
+  for (const r of additive) reasons.splice(reasons.indexOf(r), 1);
+  if (!reasons.some((r) => r.file === file2.path && r.code === "existing-file-modified")) reasons.push(reason("existing-file-modified", `the file of entry point ${route.key}`, file2.path));
+}
+function reachedKeys(file2, reached, edited) {
+  return [.../* @__PURE__ */ new Set([...reached, ...edited.filter((e) => e.file.path === file2).map((e) => e.route.key)])];
+}
+
 // src/classify/additive.ts
 var import_typescript2 = __toESM(require_typescript(), 1);
 import { isDeepStrictEqual } from "util";
@@ -237472,60 +237555,6 @@ function routesReaching(reach, routes) {
     if (best !== void 0) hits.push({ route, via: chainFrom(reach, best) });
   }
   return hits.sort((a, b) => compareStrings(a.route.path, b.route.path) || compareStrings(a.route.key, b.route.key));
-}
-
-// src/classify/reasons.ts
-var CLASSIFICATIONS = ["global", "unknown", "touches-existing", "isolated"];
-var REASONS = {
-  "global-file-changed": "global",
-  "manifest-changed": "global",
-  "dependency-critical": "global",
-  "lockfile-only-change": "global",
-  "analysis-error": "unknown",
-  "parse-error": "unknown",
-  "dynamic-route": "unknown",
-  "unresolved-import": "unknown",
-  "routes-not-additive": "touches-existing",
-  "schema-not-additive": "touches-existing",
-  "resolvers-not-additive": "touches-existing",
-  "barrel-not-additive": "touches-existing",
-  "i18n-not-additive": "touches-existing",
-  "existing-file-modified": "touches-existing",
-  "existing-file-unreachable": "touches-existing",
-  "existing-file-renamed": "touches-existing",
-  "existing-file-deleted": "touches-existing",
-  "infra-file-changed": "touches-existing",
-  "lockfile-changed-elsewhere": "touches-existing",
-  "new-file-reached-by-existing-route": "touches-existing",
-  "tests-modified": "info",
-  "type-only-change": "info",
-  "declarations-additive": "info",
-  "dependency-changed": "info",
-  "lockfile-changed": "info",
-  "route-added": "info",
-  "routes-additive": "info",
-  "schema-additive": "info",
-  "resolvers-additive": "info",
-  "barrel-additive": "info",
-  "i18n-additive": "info",
-  "new-file-in-new-route": "info",
-  "new-file-disconnected": "info",
-  "file-excluded": "info",
-  "outside-project": "info",
-  "no-existing-code-touched": "info"
-};
-var REASON_CODES = Object.keys(REASONS);
-function reason(code2, detail, file2) {
-  return file2 === void 0 ? { code: code2, detail } : { code: code2, file: file2, detail };
-}
-function classificationFrom(reasons) {
-  for (const cls of ["global", "unknown", "touches-existing"]) if (reasons.some((r) => REASONS[r.code] === cls)) return cls;
-  return "isolated";
-}
-var RANK = new Map(REASON_CODES.map((code2, i) => [code2, i]));
-function sortReasons(reasons) {
-  const unique = new Map(reasons.map((r) => [`${r.code}\0${r.file ?? ""}\0${r.detail}`, r]));
-  return [...unique.values()].sort((a, b) => (RANK.get(a.code) ?? 0) - (RANK.get(b.code) ?? 0) || compareStrings(a.file ?? "", b.file ?? "") || compareStrings(a.detail, b.detail));
 }
 
 // src/classify/risk.ts
@@ -238039,6 +238068,11 @@ function classify(input2) {
     if (hits.length > 0) reasons.push(reason("existing-file-modified", `reached by ${hits.length} existing route(s): ${describeHits(hits)}`, target.path));
     else reasons.push(reason("existing-file-unreachable", nodes.has(target.path) ? "modified, and no route reaches it" : "modified, and it is not part of the import graph", target.path));
   }
+  const editedEntries = editedEntryFiles(input2.backend?.configEntries ?? /* @__PURE__ */ new Map(), outputFiles, existingRoutes, input2.typeOnlyFiles);
+  for (const edited of editedEntries) {
+    affected.add(edited.route, edited.file.path, [edited.file.path]);
+    markEdited(edited, reasons);
+  }
   for (const file2 of newFiles) {
     const impact = impactOf(file2);
     if (impact?.newEntriesReaching !== void 0) {
@@ -238069,7 +238103,7 @@ function classify(input2) {
   const allKeys = [...headRoutes.routes, ...input2.baseRoutes?.routes ?? []].map((r) => r.key);
   const hasChildren = (key) => allKeys.some((k) => k.startsWith(`${key}${KEY_SEPARATOR}`));
   const riskFiles = outputFiles.filter((f) => !input2.typeOnlyFiles?.has(f.path)).filter((f) => f.role === "source" || f.role === "barrel" || f.role === "i18n" || f.role === "routes" || f.role === "schema" || f.role === "resolvers").map((f) => ({ path: f.path, change: f.status === "modified" ? f.additive === true ? "additive" : "modified" : f.status }));
-  const overrides = new Map([...input2.backend?.impacts ?? [], ...input2.declImpacts ?? []].map(([f, i]) => [f, [...i.affected.keys()].filter((k) => !hasChildren(k)).length]));
+  const overrides = new Map([...input2.backend?.impacts ?? [], ...input2.declImpacts ?? []].map(([f, i]) => [f, reachedKeys(f, i.affected.keys(), editedEntries).filter((k) => !hasChildren(k)).length]));
   const risk = computeRisk({ index, nodes, existingRoutes, hasChildren, files: riskFiles, ...input2.backend ? { unit: { one: "operation", many: "operations" } } : {}, ...overrides.size > 0 ? { affectedOverride: overrides } : {} });
   const sorted2 = sortReasons(reasons);
   return {
@@ -238102,11 +238136,11 @@ function parseCodeowners(text) {
     const line3 = raw.replace(/(^|\s)#.*$/, "").trim();
     if (line3 === "") continue;
     const [pattern = "", ...owners] = line3.split(/\s+/);
-    let glob = pattern.replace(/^\//, "");
-    const anchored = pattern.startsWith("/") || glob.replace(/\/$/, "").includes("/");
-    if (glob.endsWith("/")) glob = `${glob}**`;
-    const globs3 = [anchored ? glob : `**/${glob}`];
-    if (!glob.includes("*")) globs3.push(`${globs3[0] ?? ""}/**`);
+    let glob2 = pattern.replace(/^\//, "");
+    const anchored = pattern.startsWith("/") || glob2.replace(/\/$/, "").includes("/");
+    if (glob2.endsWith("/")) glob2 = `${glob2}**`;
+    const globs3 = [anchored ? glob2 : `**/${glob2}`];
+    if (!glob2.includes("*")) globs3.push(`${globs3[0] ?? ""}/**`);
     const match = (0, import_picomatch.default)(globs3, { dot: true });
     rules.push({ match: (path3) => match(path3), owners });
   }
@@ -238483,7 +238517,7 @@ var RiskSchema = external_exports.object({
 var RouteRefSchema = external_exports.object({ key: external_exports.string(), path: external_exports.string() }).strict();
 var OutputSchema = external_exports.object({
   schemaVersion: external_exports.literal(1),
-  /** What the entry points are: React pages (frontend) or GraphQL operations and REST endpoints (backend). */
+  /** What the entry points are: React pages (frontend) or GraphQL operations, REST endpoints and configured files (backend). */
   surface: external_exports.enum(["frontend", "backend"]),
   /** "revscope" in results written before the project was renamed. */
   tool: external_exports.object({ name: external_exports.enum(["farol", "revscope"]), version: external_exports.string() }).strict(),
@@ -249806,7 +249840,13 @@ async function backendImpacts(ctx, table3, files, roleOf, baseSha, headSha) {
     }
   }
   const baseRest = table3.restKeysWithout(new Set(addedMounts.map((m) => m.id)), addedAnchors);
-  const baseRoutes = table3.operations.filter((r) => r.key.includes(" ") ? baseRest.has(r.key) : !addedOperations.has(r.key));
+  const addedFiles = new Set(files.filter((f) => f.status === "added").map((f) => f.path));
+  const inBase = (r) => {
+    const file2 = table3.configEntries.get(r.key);
+    if (file2 !== void 0) return !addedFiles.has(file2);
+    return r.key.includes(" ") ? baseRest.has(r.key) : !addedOperations.has(r.key);
+  };
+  const baseRoutes = table3.operations.filter(inBase);
   return { impacts: mountImpacts(table3, addedMounts, baseRest, duplicateEndpoints(impacts, baseRest)), baseRoutes: { routes: baseRoutes, dynamic: [], sources: [] }, contracts: await schemaContracts(ctx, table3, files, baseSha) };
 }
 async function schemaContracts(ctx, table3, files, baseSha) {
@@ -250398,6 +250438,17 @@ function usesGlobal(sf, name, checker) {
 
 // src/backend/entrypoints.ts
 var import_picomatch2 = __toESM(require_picomatch2(), 1);
+var runsCode2 = (statement) => !import_typescript17.default.isImportDeclaration(statement) && !import_typescript17.default.isExportDeclaration(statement);
+function configuredEntries(byKind, programFiles, rel, anchorsOf) {
+  return Object.entries(byKind).flatMap(([kind, globs3]) => {
+    const match = (0, import_picomatch2.default)([...globs3], { dot: true });
+    return programFiles.filter((sf) => match(rel(sf.fileName))).map((sf) => {
+      const file2 = rel(sf.fileName);
+      const key = `${kind} ${file2}`;
+      return { key, path: key, index: false, entry: file2, modules: sortedUnique(sf.statements.filter(runsCode2).flatMap(anchorsOf)).filter((m) => m !== file2), layouts: [] };
+    });
+  });
+}
 function buildBackendTable(input2) {
   const root = input2.repoRoot.replaceAll("\\", "/");
   const rel = (fileName) => posix9.relative(root, fileName.replaceAll("\\", "/"));
@@ -250527,9 +250578,12 @@ function buildBackendTable(input2) {
     const installed = honoKeys.has(key) ? registrations.filter((reg) => reg.paths.some((p) => underPath(keyPath(key), p))).flatMap((reg) => reg.modules) : [];
     entries.push({ key, path: key, index: false, entry: null, modules: sortedUnique([...[...ids].flatMap((id) => [...anchors.get(id)?.modules ?? []]), ...installed]), layouts: [] });
   }
+  const configured = configuredEntries(input2.entries, programFiles, rel, anchorsOf);
+  entries.push(...configured);
   entries.sort((a, b) => compareStrings(a.key, b.key));
   return {
     operations: entries,
+    configEntries: new Map(configured.map((e) => [e.key, e.entry])),
     resolverKeys,
     operationTypes,
     rootTypes: new Set(Object.values(schema.roots)),
@@ -251863,8 +251917,8 @@ function diskFiles(dir, repoRoot2) {
   walk(dir);
   return out;
 }
-function projectGlobs(ctx, context) {
-  return Object.fromEntries(Object.entries(context).map(([k, globs3]) => [k, globs3.map((g) => ctx.projectPrefix === "" ? g : `${ctx.projectPrefix}/${g}`)]));
+function projectGlobs(ctx, byKey) {
+  return Object.fromEntries(Object.entries(byKey).map(([k, globs3]) => [k, (globs3 ?? []).map((g) => ctx.projectPrefix === "" ? g : `${ctx.projectPrefix}/${g}`)]));
 }
 function loadBackendWorkspace(ctx, fs2, treeFiles, lap) {
   const projectDir = toPosix(ctx.projectDir);
@@ -251879,7 +251933,7 @@ function loadBackendWorkspace(ctx, fs2, treeFiles, lap) {
   const graph = buildImportGraph(project, { repoRoot: ctx.repoRoot, isOrigin: (path3) => isOrigin(path3) || roleOf(path3) === "outside" });
   lap("graph");
   const files = (treeFiles ?? diskFiles(projectDir, repoRoot2)).filter((f) => ctx.projectPrefix === "" || f.startsWith(`${ctx.projectPrefix}/`));
-  const backend = buildBackendTable({ project, repoRoot: repoRoot2, files, read: (f) => fs2.readFile(posix15.join(repoRoot2, f)), isOrigin, graphql: ctx.config.backend.graphql, rest: ctx.config.backend.rest, context: projectGlobs(ctx, ctx.config.backend.context) });
+  const backend = buildBackendTable({ project, repoRoot: repoRoot2, files, read: (f) => fs2.readFile(posix15.join(repoRoot2, f)), isOrigin, graphql: ctx.config.backend.graphql, rest: ctx.config.backend.rest, context: projectGlobs(ctx, ctx.config.backend.context), entries: projectGlobs(ctx, ctx.config.backend.entries) });
   const rel = (fileName) => posix15.relative(repoRoot2, toPosix(fileName));
   const isProjectFile = (fileName) => isProjectPath(repoRoot2, fileName);
   const extra = globalUses(project, backend.globals, rel, isProjectFile);
@@ -252456,7 +252510,7 @@ async function runAnalyze(ctx, options, deps) {
       const existing = new Set((baseRoutes ?? ws.routes).routes.map((r) => r.key));
       const declImpactMap = declImpacts(baseOut, head, declChanged, () => true, { existing, erasedTypes: true });
       lap("base");
-      result = classify({ files, roleOf, isGenerated: createGeneratedMatcher(ctx.config.generated, ctx.projectPrefix, ctx.config.generated.length === 0 ? [] : await listFiles(ctx.repoRoot, meta3.head.sha)), manifests, otherManifests, typeOnlyFiles, declImpacts: declImpactMap, ...backend ? { backend: { impacts: backend.impacts } } : {}, graph: ws.graph, routesFile: ws.routesFile, ...ws.routesFromDirectory ? { routesFromDirectory: true } : {}, headRoutes: ws.routes, baseRoutes, baseText, headText });
+      result = classify({ files, roleOf, isGenerated: createGeneratedMatcher(ctx.config.generated, ctx.projectPrefix, ctx.config.generated.length === 0 ? [] : await listFiles(ctx.repoRoot, meta3.head.sha)), manifests, otherManifests, typeOnlyFiles, declImpacts: declImpactMap, ...backend && ws.backend ? { backend: { impacts: backend.impacts, configEntries: ws.backend.configEntries } } : {}, graph: ws.graph, routesFile: ws.routesFile, ...ws.routesFromDirectory ? { routesFromDirectory: true } : {}, headRoutes: ws.routes, baseRoutes, baseText, headText });
     }
     for (const f of result.files) if (f.status === "added" && (f.role === "source" || f.role === "barrel") && isScriptFile(f.path) && isDeclarationsOnlyModule(f.path, readHead(f.path) ?? "x(")) f.declarationsOnly = true;
     lap("classify");
@@ -253408,9 +253462,15 @@ function contractsSection2(o) {
 
 // src/report/test-plan.ts
 import { posix as posix19 } from "path";
+function fileOfEntryKey(key) {
+  const space = key.indexOf(" ");
+  const file2 = key.slice(space + 1);
+  return ENTRY_KINDS.includes(key.slice(0, space)) && !file2.startsWith("/") && isScriptFile(file2) ? file2 : null;
+}
 function moduleOf(o, path3) {
   if (o.surface === "backend") {
     const parts = path3.split(" ");
+    if (fileOfEntryKey(path3) !== null) return parts[0] ?? "";
     if (parts.length >= 3) return `${parts[0] ?? ""} ${parts[1] ?? ""}`;
     if (parts.length === 2) {
       const first2 = (parts[1] ?? "").split("/").filter((s) => s !== "")[0];
@@ -254149,6 +254209,8 @@ function urlSegments(path3) {
 }
 function backendSegments(path3) {
   const parts = path3.split(" ");
+  const file2 = fileOfEntryKey(path3);
+  if (file2 !== null) return [parts[0] ?? "", ...urlSegments(file2)];
   if (parts.length >= 3) return [parts[0] ?? "", parts[1] ?? "", ...urlSegments(parts.slice(2).join(" "))];
   if (parts.length === 2) return [parts[0] ?? "", ...urlSegments(parts[1] ?? "")];
   return path3.split(".");

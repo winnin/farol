@@ -7,7 +7,7 @@ import { parseIsolated } from '../../src/project/parse.js'
 import { memoryProject, ROOT } from '../helpers/memory.js'
 
 function table(files: Record<string, string>) {
-  return buildBackendTable({ project: memoryProject(files, 'src/main.ts'), repoRoot: ROOT, files: Object.keys(files), read: (f) => files[f], isOrigin: () => true, graphql: false, rest: true, context: {} })
+  return buildBackendTable({ project: memoryProject(files, 'src/main.ts'), repoRoot: ROOT, files: Object.keys(files), read: (f) => files[f], isOrigin: () => true, graphql: false, rest: true, context: {}, entries: {} })
 }
 
 const keys = (files: Record<string, string>): string[] => table(files).operations.map((o) => o.key)

@@ -244,7 +244,8 @@ GraphQL root operations (schema files and `gql` templates, per resolver) and Fas
 
 Reports and CI are the same as for [React Router](#react-frontend-react-router): [`examples/workflow.yml`](examples/workflow.yml). If
 resolvers reach data through an injected context (`ctx.loaders.Brand.byId()`), tell farol where the providers live:
-`"backend": { "context": { "loaders": ["src/modules/*/loaders/index.ts"] } }`.
+`"backend": { "context": { "loaders": ["src/modules/*/loaders/index.ts"] } }`. To list Kafka handlers, cron jobs, gRPC
+services and scripts as entry points, name their files: `"backend": { "entries": { "JOB": ["src/jobs/*.job.ts"] } }`.
 
 ### Go service
 

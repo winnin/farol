@@ -1,4 +1,6 @@
 import { posix } from 'node:path'
+import { isScriptFile } from '../classify/declarations-only.js'
+import { ENTRY_KINDS } from '../config/schema.js'
 import { compareStrings } from '../output/order.js'
 import type { Output } from '../output/schema.js'
 import { mergeScore, scoreGroups } from './merge-score.js'
@@ -22,10 +24,18 @@ export interface TestGroup {
   items: TestItem[]
 }
 
+/** The file of a key such as `JOB src/jobs/a.ts`, an entry point named by its file. A file name can hold spaces. */
+export function fileOfEntryKey(key: string): string | null {
+  const space = key.indexOf(' ')
+  const file = key.slice(space + 1)
+  return (ENTRY_KINDS as readonly string[]).includes(key.slice(0, space)) && !file.startsWith('/') && isScriptFile(file) ? file : null
+}
+
 /** Module of an entry point: the service and method of backend keys, the first URL segment of pages. */
 export function moduleOf(o: Output, path: string): string {
   if (o.surface === 'backend') {
     const parts = path.split(' ')
+    if (fileOfEntryKey(path) !== null) return parts[0] ?? ''
     if (parts.length >= 3) return `${parts[0] ?? ''} ${parts[1] ?? ''}`
     if (parts.length === 2) {
       const first = (parts[1] ?? '').split('/').filter((s) => s !== '')[0]

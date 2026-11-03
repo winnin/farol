@@ -4,6 +4,7 @@ import { compareStrings, sortedUnique } from '../output/order.js'
 import type { AddedRoute, AffectedRoute, Dependencies, OutputFile, UnresolvedImportOut } from '../output/schema.js'
 import type { ImportGraph, ParseError } from '../project/graph.js'
 import { KEY_SEPARATOR } from '../routes/paths.js'
+import { editedEntryFiles, markEdited, reachedKeys } from './entry-files.js'
 import type { DynamicRoute, RouteEntry, RouteTable } from '../routes/types.js'
 import { checkBarrelAdditive, checkI18nAdditive, compareRouteTables, JsonParseError, losesTokens, unexplainedRemovedLines } from './additive.js'
 import { createReachIndex, reachFrom, routesReaching, type ReachIndex } from './reach.js'
@@ -23,7 +24,7 @@ export interface ClassifyInput {
   /** Modified files that only declare types in base and head (erased at compile time). */
   typeOnlyFiles?: ReadonlySet<string>
   /** Backend only: impact of each changed schema or resolver file (Go/Python: of every source file). */
-  backend?: { impacts: ReadonlyMap<string, BackendFileImpact> }
+  backend?: { impacts: ReadonlyMap<string, BackendFileImpact>; configEntries?: ReadonlyMap<string, string> }
   /** TypeScript: declaration-level impact of changed source files (precise reach instead of the file graph). */
   declImpacts?: ReadonlyMap<string, BackendFileImpact>
   /** Dependency diff of every changed manifest (or why it could not be read). */
@@ -332,6 +333,12 @@ export function classify(input: ClassifyInput): ClassifyResult {
     else reasons.push(reason('existing-file-unreachable', nodes.has(target.path) ? 'modified, and no route reaches it' : 'modified, and it is not part of the import graph', target.path))
   }
 
+  const editedEntries = editedEntryFiles(input.backend?.configEntries ?? new Map<string, string>(), outputFiles, existingRoutes, input.typeOnlyFiles)
+  for (const edited of editedEntries) {
+    affected.add(edited.route, edited.file.path, [edited.file.path])
+    markEdited(edited, reasons)
+  }
+
   for (const file of newFiles) {
     const impact = impactOf(file)
     if (impact?.newEntriesReaching !== undefined) {
@@ -368,7 +375,7 @@ export function classify(input: ClassifyInput): ClassifyResult {
     .filter((f) => f.role === 'source' || f.role === 'barrel' || f.role === 'i18n' || f.role === 'routes' || f.role === 'schema' || f.role === 'resolvers')
     .map((f) => ({ path: f.path, change: f.status === 'modified' ? (f.additive === true ? 'additive' : 'modified') : f.status }) as const)
   // Pages (not layouts) the declaration-level impact reaches.
-  const overrides = new Map([...(input.backend?.impacts ?? []), ...(input.declImpacts ?? [])].map(([f, i]) => [f, [...i.affected.keys()].filter((k) => !hasChildren(k)).length] as const))
+  const overrides = new Map([...(input.backend?.impacts ?? []), ...(input.declImpacts ?? [])].map(([f, i]) => [f, reachedKeys(f, i.affected.keys(), editedEntries).filter((k) => !hasChildren(k)).length] as const))
   const risk = computeRisk({ index, nodes, existingRoutes, hasChildren, files: riskFiles, ...(input.backend ? { unit: { one: 'operation', many: 'operations' } } : {}), ...(overrides.size > 0 ? { affectedOverride: overrides } : {}) })
   const sorted = sortReasons(reasons)
   return {

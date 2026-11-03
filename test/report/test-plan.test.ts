@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { OutputSchema, type Output } from '../../src/output/schema.js'
+import { backendSegments } from '../../src/report/html-routes.js'
 import { moduleOf, testPlan } from '../../src/report/test-plan.js'
 import { FIXTURES_DIR } from '../helpers/repo.js'
 
@@ -35,5 +36,43 @@ describe('manual test checklist', () => {
     expect(moduleOf(front, '/products/:id')).toBe('/products')
     expect(moduleOf({ ...front, surface: 'backend' }, 'orders_api GET /orders')).toBe('orders_api GET')
     expect(moduleOf({ ...front, surface: 'backend' }, 'Query.brand')).toBe('Query')
+  })
+
+  it('groups entry points named by a file under their kind', () => {
+    const backend = { ...golden('05-shared-component'), surface: 'backend' as const }
+    expect(moduleOf(backend, 'JOB src/jobs/drain.job.ts')).toBe('JOB')
+    expect(moduleOf(backend, 'CONSUMER src/consumers/signal.handler.ts')).toBe('CONSUMER')
+    expect(moduleOf(backend, 'RPC src/rpc/brands.rpc.ts')).toBe('RPC')
+    expect(moduleOf(backend, 'RUN src/scripts/seed.ts')).toBe('RUN')
+  })
+
+  it('keeps a REST path that ends in a script name under its method and first segment', () => {
+    const backend = { ...golden('05-shared-component'), surface: 'backend' as const }
+    expect(moduleOf(backend, 'GET /static/app.js')).toBe('GET /static')
+    expect(moduleOf(backend, 'api GET /static/app.js')).toBe('api GET')
+  })
+
+  it('reads a file path with a space as one file', () => {
+    const backend = { ...golden('05-shared-component'), surface: 'backend' as const }
+    expect(moduleOf(backend, 'JOB src/my jobs/a.ts')).toBe('JOB')
+  })
+
+  it('keeps gRPC methods of a Go service under their service', () => {
+    const backend = { ...golden('05-shared-component'), surface: 'backend' as const }
+    expect(moduleOf(backend, 'RPC brandspb.Brands/GetBrand')).toBe('RPC /brandspb.Brands')
+  })
+})
+
+describe('tree of backend operations', () => {
+  it.each([
+    ['JOB src/my jobs/a.ts', ['JOB', 'src', 'my jobs', 'a.ts']],
+    ['RUN scripts/a.py', ['RUN', 'scripts', 'a.py']],
+    ['JOB src/jobs/a.ts', ['JOB', 'src', 'jobs', 'a.ts']],
+    ['GET /static/app.js', ['GET', 'static', 'app.js']],
+    ['api GET /a/b', ['api', 'GET', 'a', 'b']],
+    ['RPC brandspb.Brands/GetBrand', ['RPC', 'brandspb.Brands', 'GetBrand']],
+    ['Query.brand', ['Query', 'brand']],
+  ])('%s', (key, segments) => {
+    expect(backendSegments(key)).toEqual(segments)
   })
 })

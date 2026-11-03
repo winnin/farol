@@ -112,7 +112,8 @@ reported against the route's own module.
 ## TypeScript and JavaScript backends (GraphQL, REST)
 
 With `"surface": "backend"`, the entry points are GraphQL root operations (`Query.*`, `Mutation.*`, `Subscription.*`)
-and REST endpoints (`GET /path`).
+and REST endpoints (`GET /path`). Files named in `backend.entries` are entry points too (`JOB src/jobs/drain.job.ts`), for
+Kafka handlers, cron jobs, gRPC services and scripts.
 
 - **Schema:** every `.graphql`/`.gql` file and `gql`/`graphql` tagged template, parsed with the official GraphQL parser. An operation's *reachable types* are every type it can return, through fields, unions and interfaces.
 - **Resolvers:** resolver maps anywhere (`{ Type: { field() {…} } }`). A member counts only when it names a real field of that type, so loader registries keyed by type names are not mistaken for resolvers. Enum value maps count too. An operation runs its own resolver and the resolvers of every type it can return.

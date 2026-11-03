@@ -89,6 +89,29 @@ describe('roles', () => {
   })
 })
 
+describe('backend entry points', () => {
+  it.each([
+    ['a Go project', '"language":"go","surface":"backend"'],
+    ['a Python project', '"language":"python","surface":"backend"'],
+    ['a frontend', '"routes":{"file":"src/routes.tsx"}'],
+  ])('rejects them on %s, which would ignore them', (_name, rest) => {
+    expect(() => parseConfig(`{${rest},"backend":{"entries":{"JOB":["a.ts"]}}}`, 'c')).toThrow(/backend\.entries/)
+  })
+
+  it.each(['../shared/jobs/*.ts', 'src/../jobs/*.ts', './src/jobs/*.ts', '!src/jobs/legacy.ts', 'src/{../x,a}/*.ts', '{./src/a/*.ts,src/b/*.ts}'])('rejects the glob %s, which would not match as written', (glob) => {
+    expect(() => parseConfig(JSON.stringify({ surface: 'backend', backend: { entries: { JOB: [glob] } } }), 'c')).toThrow(/relative to the project/)
+  })
+
+  it.each(['!(top).ts', 'src/{a,b}/*.ts', 'src/.hidden/*.ts'])('accepts the glob %s', (glob) => {
+    const config = parseConfig(JSON.stringify({ surface: 'backend', backend: { entries: { JOB: [glob] } } }), 'c')
+    expect(config.backend.entries.JOB).toEqual([glob])
+  })
+
+  it('rejects a kind it does not know', () => {
+    expect(() => parseConfig('{"surface":"backend","backend":{"entries":{"WORKER":["a.ts"]}}}', 'c')).toThrow(/WORKER/)
+  })
+})
+
 describe('generated import targets', () => {
   const head = ['apps/api/src/lib/format.ts', 'apps/api/src/generated/.gitkeep', 'src/lib/a.ts']
 
