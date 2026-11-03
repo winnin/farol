@@ -206,9 +206,11 @@ export async function runAnalyze(ctx: Context, options: AnalyzeOptions, deps: An
     meta.mergeBase = mb
     const ignoredOf = createIgnoreOf(ctx, options.ignore ?? [])
     const allFiles = await diffFiles(ctx.repoRoot, mb, meta.head.sha)
-    // A rename stays when one of its paths is not ignored: code that leaves for an ignored path is still gone.
+    // A rename stays in the classification when one of its paths is not ignored: code that leaves for an ignored
+    // path is still gone. Signals (coverage, lint, tests) only read files whose path is not ignored.
     const files = allFiles.filter((f) => !ignoredOf(f.path) || (f.oldPath !== undefined && !ignoredOf(f.oldPath)))
-    meta.ignoredFiles = allFiles.filter((f) => !files.includes(f)).map((f) => f.path)
+    const signalFiles = files.filter((f) => !ignoredOf(f.path))
+    meta.ignoredFiles = allFiles.filter((f) => !signalFiles.includes(f)).map((f) => f.path)
     lap('diff')
     ctx.log(`${files.length} changed file(s) between ${mb.slice(0, 12)} and ${meta.head.sha.slice(0, 12)}`)
 
@@ -285,7 +287,7 @@ export async function runAnalyze(ctx: Context, options: AnalyzeOptions, deps: An
     for (const f of result.files) if (f.status === 'added' && (f.role === 'source' || f.role === 'barrel') && isScriptFile(f.path) && isDeclarationsOnlyModule(f.path, readHead(f.path) ?? 'x(')) f.declarationsOnly = true
     lap('classify')
     const signalInputs: SignalInputs = {
-      files,
+      files: signalFiles,
       roleOf,
       // Flags are relative to the current directory, configuration paths to the project directory.
       coverage: reportPath(ctx, options.coverage, ctx.config.signals.coverage),
@@ -303,7 +305,7 @@ export async function runAnalyze(ctx: Context, options: AnalyzeOptions, deps: An
       surface: ctx.config.surface,
       entries: headRoutes.routes.map((r) => ({ key: r.key, path: r.path, hasChildren: keys.some((k) => k.startsWith(`${r.key}${KEY_SEPARATOR}`)) })),
       affected: result.routes.affected.map((r) => r.key),
-      changedFiles: files.map((f) => f.path),
+      changedFiles: signalFiles.map((f) => f.path),
       callersOf: (contracts?.entries ?? []).map((e) => e.key),
     })
     if (usage) meta.usage = usage

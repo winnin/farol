@@ -7,28 +7,32 @@ function withoutExtension(path: string): string {
   return ext === '' ? path : path.slice(0, -ext.length)
 }
 
-/** Source extensions an import of an emitted file (`./a.js`) can point at. */
+/** Source and declaration extensions an import can point at, by the extension it is written with (`./a.js`, `./a`). */
 const SOURCES_OF_EMITTED: Readonly<Record<string, readonly string[]>> = {
-  '.js': ['.ts', '.tsx', '.jsx'],
-  '.jsx': ['.tsx'],
-  '.mjs': ['.mts'],
-  '.cjs': ['.cts'],
+  '': ['.d.ts'],
+  '.js': ['.ts', '.tsx', '.jsx', '.d.ts'],
+  '.jsx': ['.tsx', '.d.ts'],
+  '.mjs': ['.mts', '.d.mts'],
+  '.cjs': ['.cts', '.d.cts'],
 }
 
 /** Whether an unresolved specifier target could have pointed at a file this PR deleted or renamed away. */
 export function targetsRemoved(target: string, removed: readonly string[]): boolean {
-  const stem = withoutExtension(target)
-  const sources = (SOURCES_OF_EMITTED[posix.extname(target)] ?? []).map((ext) => stem + ext)
-  return removed.some((r) => r === target || withoutExtension(r) === target || sources.includes(r) || (posix.dirname(r) === target && posix.basename(r).startsWith('index.')))
+  const ext = posix.extname(target)
+  const sources = new Set((SOURCES_OF_EMITTED[ext] ?? []).map((e) => withoutExtension(target) + e))
+  const isFolderIndex = (r: string): boolean => posix.dirname(r) === target && posix.basename(r).startsWith('index.')
+  return removed.some((r) => r === target || withoutExtension(r) === target || sources.has(r) || isFolderIndex(r))
 }
 
-/** Roles whose files are not production code: no entry point runs them. */
-const NOT_COUNTED: ReadonlySet<AnalysisRole | 'outside'> = new Set(['test', 'story', 'excluded', 'outside'])
+/** Roles of files that are not production code: no entry point runs them. */
+const NON_PRODUCTION_ROLES: ReadonlySet<AnalysisRole | 'outside'> = new Set(['test', 'story', 'excluded', 'outside'])
 
 /**
  * A rename from a path that counts as production code to one that does not: the code is gone from the analysis.
  * It lists the roles that do not count, so a new role counts.
  */
-export function leavesCountedCode(file: ChangedFile, newRole: AnalysisRole | 'outside', roleOf: (path: string) => AnalysisRole | 'outside'): boolean {
-  return file.status === 'renamed' && file.oldPath !== undefined && NOT_COUNTED.has(newRole) && !NOT_COUNTED.has(roleOf(file.oldPath))
+export function renamedOutOfProduction(file: ChangedFile, newRole: AnalysisRole | 'outside', roleOf: (path: string) => AnalysisRole | 'outside'): file is ChangedFile & { oldPath: string } {
+  if (file.status !== 'renamed') return false
+  if (file.oldPath === undefined) throw new Error(`internal: renamed file ${file.path} has no old path`)
+  return NON_PRODUCTION_ROLES.has(newRole) && !NON_PRODUCTION_ROLES.has(roleOf(file.oldPath))
 }

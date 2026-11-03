@@ -207,7 +207,7 @@ export const ConfigSchema = z
     generated: globs.default([]),
     /** Where `farol usage` reads traffic from (optional). */
     datadog: DatadogSchema.optional(),
-    /** Changed files left out of every analysis (classification, dependencies, signals). Project-relative or repo-relative globs. */
+    /** Changed files left out of every analysis (classification, dependencies, signals). A rename from a path that is not ignored still counts for the classification. Project-relative or repo-relative globs. */
     ignore: globs.default([]),
     roles: z
       .object({

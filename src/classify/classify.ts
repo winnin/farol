@@ -13,7 +13,7 @@ import { computeRisk, type FileRisk } from './risk.js'
 import type { BackendFileImpact } from '../backend/impact.js'
 import { describeChange, sortChanges, type ManifestResult } from './dependencies.js'
 import { lockfileReason } from './lockfile.js'
-import { leavesCountedCode, targetsRemoved } from './removed.js'
+import { renamedOutOfProduction, targetsRemoved } from './removed.js'
 
 export interface ClassifyInput {
   files: readonly ChangedFile[]
@@ -183,8 +183,9 @@ export function classify(input: ClassifyInput): ClassifyResult {
     const out: OutputFile = { path: file.path, status: file.status, role, linesAdded: file.added.length, linesRemoved: file.removed.length }
     if (file.oldPath !== undefined) out.oldPath = file.oldPath
     outputFiles.push(out)
-    const leaves = leavesCountedCode(file, role, input.roleOf)
-    if (leaves) reasons.push(reason('existing-file-renamed', `renamed from ${file.oldPath ?? '?'}, which no longer counts as production code`, file.path))
+    // `role` is resolved here: a file outside the project is `source` when the project imports it, else `excluded`.
+    const leaves = renamedOutOfProduction(file, role, input.roleOf)
+    if (leaves) reasons.push(reason('existing-file-renamed', `renamed from ${file.oldPath}, which no longer counts as production code`, file.path))
 
     if (role === 'excluded' || role === 'story') continue
     if (role === 'manifest') {

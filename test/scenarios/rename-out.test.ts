@@ -40,6 +40,7 @@ describe('a rename out of production code', () => {
   it('does not report an existing test when a source file moves to a test path', async () => {
     const o = await app(mv('src/lib/orphan.ts', 'src/lib/orphan.test.ts'), withFile('src/lib/orphan.ts'))
     expect(codes(o)).not.toContain('tests-modified')
+    expect(o.signals.testsModified.files).toEqual([])
   })
 
   it('is a change of existing code when a global file moves to a test path', async () => {
@@ -55,6 +56,15 @@ describe('a rename out of production code', () => {
     })
     expect(o.classification).toBe('touches-existing')
     expect(codes(o)).toContain('existing-file-renamed')
+  })
+
+  it('leaves a file that moves to an ignored path out of the signals', async () => {
+    const o = await app(mv('src/lib/a.test.ts', 'src/legacy/a.test.ts'), (repo) => {
+      config(repo, { ignore: ['src/legacy/**'] })
+      withFile('src/lib/a.test.ts')(repo)
+    })
+    expect(o.signals.testsModified.files).toEqual([])
+    expect(o.ignoredFiles).toEqual(['src/legacy/a.test.ts'])
   })
 
   it('leaves out a rename when both of its paths are ignored', async () => {
@@ -129,6 +139,20 @@ describe('an import written with the extension of the emitted file', () => {
       repo.write(removed, removed.endsWith('.css') ? '.a { color: red; }\n' : ORPHAN)
       repo.write('src/lib/user.ts', user(specifier))
     })
-    expect(codes(o)).not.toContain('unresolved-import')
+    expect(codes(o)).toContain('existing-file-deleted')
+    expect(o.classification).not.toBe('unknown')
+  })
+
+  it.each([
+    ['./a.js', 'src/lib/a.d.ts'],
+    ['./a', 'src/lib/a.d.ts'],
+    ['./a.mjs', 'src/lib/a.d.mts'],
+  ])('breaks when the declaration file %s points at is deleted (%s)', async (specifier, declaration) => {
+    const o = await app(remove(declaration), (repo) => {
+      repo.write(declaration, 'export declare function orphan(n: number): string\n')
+      repo.write('src/lib/user.ts', user(specifier))
+    })
+    expect(o.classification).toBe('unknown')
+    expect(o.reasons).toContainEqual(expect.objectContaining({ code: 'unresolved-import', file: 'src/lib/user.ts' }))
   })
 })

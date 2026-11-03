@@ -204,7 +204,7 @@ export const OutputSchema = z
     classification: z.enum(CLASSIFICATIONS),
     reasons: z.array(ReasonSchema),
     files: z.array(FileSchema),
-    /** Changed files left out of everything by "ignore" (configuration) or --ignore. */
+    /** Changed files whose path matches "ignore" (configuration) or --ignore: left out of everything, except that a rename from a path that is not ignored still counts for the classification. */
     ignoredFiles: z.array(path),
     dependencies: DependenciesSchema,
     risk: RiskSchema,

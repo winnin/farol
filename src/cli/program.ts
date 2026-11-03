@@ -63,7 +63,7 @@ export function buildProgram(): Command {
     .option('--coverage <file>', 'coverage report: Istanbul JSON, Go coverprofile or coverage.py JSON (overrides signals.coverage)')
     .option('--eslint <file>', 'lint report: eslint -f json, biome lint --reporter=gitlab, golangci-lint JSON or ruff JSON (overrides signals.eslint)')
     .option('--out <file>', 'write the JSON here instead of stdout')
-    .option('--ignore <glob...>', 'leave matching changed files out of the analysis (adds to "ignore" in the configuration)')
+    .option('--ignore <glob...>', 'leave matching changed files out of the analysis; a rename into a matching path still counts for the class (adds to "ignore" in the configuration)')
     .option('--pr <number>', 'pull request number, for links to the PR diff (default: the GitHub Actions event)', positiveInt)
     .option('--audit <file>', 'vulnerability report: npm/pnpm audit --json, govulncheck -json or pip-audit JSON (overrides signals.audit)')
     .option('--usage <file>', 'traffic per page/operation written by "farol usage" (overrides signals.usage); information only')
@@ -171,7 +171,7 @@ export function buildProgram(): Command {
     .option('--since <date>', 'only merges after this date (anything git log --since accepts)')
     .option('--branch <name>', 'branch to walk', 'HEAD')
     .option('--out <dir>', 'output directory', 'farol-history')
-    .option('--ignore <glob...>', 'leave matching changed files out of the analysis (adds to "ignore" in the configuration)')
+    .option('--ignore <glob...>', 'leave matching changed files out of the analysis; a rename into a matching path still counts for the class (adds to "ignore" in the configuration)')
     .option('--first-parent', 'analyze every first-parent commit instead of merge commits only (squash-merge repositories)', false)
     .action((raw: Partial<HistoryOptions>, cmd: Command) =>
       runAction(async () => {
