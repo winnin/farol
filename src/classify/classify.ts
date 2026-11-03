@@ -20,7 +20,7 @@ export interface ClassifyInput {
   /** Role of a repo-relative path; `outside` for files outside the project directory. */
   roleOf: (repoPath: string) => AnalysisRole | 'outside'
   /** Whether a changed path matches `ignore`: such a file is here only as a rename from a path that is not ignored. */
-  isIgnored?: (repoPath: string) => boolean
+  isIgnored: (repoPath: string) => boolean
   /** Whether an import target (repo-relative, as written) is generated code that git ignores (`generated` globs). */
   isGenerated: (repoPath: string) => boolean
   /** Modified files that only declare types in base and head (erased at compile time). */
@@ -172,7 +172,7 @@ export function classify(input: ClassifyInput): ClassifyResult {
   const newFiles: string[] = []
 
   for (const file of input.files) {
-    const ignored = input.isIgnored?.(file.path) === true
+    const ignored = input.isIgnored(file.path)
     let role = ignored ? 'excluded' : input.roleOf(file.path)
     if (role === 'outside') {
       if (file.status !== 'deleted' && nodes.has(file.path)) role = 'source'
@@ -234,7 +234,7 @@ export function classify(input: ClassifyInput): ClassifyResult {
       continue
     }
     if (file.status === 'renamed') {
-      reasons.push(reason('existing-file-renamed', `renamed from ${file.oldPath ?? '?'}`, file.path))
+      reasons.push(reason('existing-file-renamed', `renamed from ${file.oldPath}`, file.path))
       reachTargets.push({ path: file.path, reportModified: false })
       continue
     }

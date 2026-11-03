@@ -237998,7 +237998,7 @@ function classify(input2) {
   const reachTargets = [];
   const newFiles = [];
   for (const file2 of input2.files) {
-    const ignored = input2.isIgnored?.(file2.path) === true;
+    const ignored = input2.isIgnored(file2.path);
     let role = ignored ? "excluded" : input2.roleOf(file2.path);
     if (role === "outside") {
       if (file2.status !== "deleted" && nodes.has(file2.path)) role = "source";
@@ -238056,7 +238056,7 @@ function classify(input2) {
       continue;
     }
     if (file2.status === "renamed") {
-      reasons.push(reason("existing-file-renamed", `renamed from ${file2.oldPath ?? "?"}`, file2.path));
+      reasons.push(reason("existing-file-renamed", `renamed from ${file2.oldPath}`, file2.path));
       reachTargets.push({ path: file2.path, reportModified: false });
       continue;
     }
@@ -239697,8 +239697,9 @@ function testsModifiedSignal(files, roleOf) {
   const result = [];
   for (const f of files) {
     if (f.status === "added") continue;
-    const isTest = roleOf(f.path) === "test" || f.oldPath !== void 0 && roleOf(f.oldPath) === "test";
-    if (!isTest || renamedOutOfProduction(f, roleOf(f.path), roleOf)) continue;
+    const role = roleOf(f.path);
+    const isTest = role === "test" || f.oldPath !== void 0 && roleOf(f.oldPath) === "test";
+    if (!isTest || renamedOutOfProduction(f, role, roleOf)) continue;
     result.push({ path: f.path, ...f.oldPath === void 0 ? {} : { oldPath: f.oldPath }, status: f.status, linesRemoved: f.removed.length });
   }
   return { status: "ok", files: result.sort((a, b) => compareStrings(a.path, b.path)) };
@@ -252634,7 +252635,7 @@ async function runAnalyze(ctx, options, deps) {
     meta3.diffs = limitDiffs(await contextDiff(ctx.repoRoot, mb, meta3.head.sha, order), order);
     lap("diffs");
     if (options.reviewers === true) {
-      meta3.reviewers = await suggestReviewers(ctx, files, roleOf, mb, meta3.head.sha);
+      meta3.reviewers = await suggestReviewers(ctx, signalFiles, roleOf, mb, meta3.head.sha);
       lap("reviewers");
     }
     ctx.log(`classification: ${result.classification}`);

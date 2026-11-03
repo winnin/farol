@@ -29,7 +29,7 @@ const NON_PRODUCTION_ROLES: ReadonlySet<AnalysisRole | 'outside'> = new Set(['te
 
 /**
  * A rename from a path that counts as production code to one that does not: the code is gone from the analysis.
- * It lists the roles that do not count, so a new role counts.
+ * Roles not listed here count as production code, so a role added later fails closed.
  */
 export function renamedOutOfProduction(file: ChangedFile, newRole: AnalysisRole | 'outside', roleOf: (path: string) => AnalysisRole | 'outside'): file is ChangedFile & { oldPath: string } {
   if (file.status !== 'renamed') return false

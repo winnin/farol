@@ -207,7 +207,8 @@ export async function runAnalyze(ctx: Context, options: AnalyzeOptions, deps: An
     const ignoredOf = createIgnoreOf(ctx, options.ignore ?? [])
     const allFiles = await diffFiles(ctx.repoRoot, mb, meta.head.sha)
     // A rename stays in the classification when one of its paths is not ignored: code that leaves for an ignored
-    // path is still gone. Its new path gets no role, dependencies or signals.
+    // path is still gone. Its new path gets no role, dependencies, signals or reviewers. Use `files` only for the
+    // classification; everything else reads `signalFiles`, which leaves out every ignored path.
     const files = allFiles.filter((f) => !ignoredOf(f.path) || (f.oldPath !== undefined && !ignoredOf(f.oldPath)))
     const signalFiles = files.filter((f) => !ignoredOf(f.path))
     meta.ignoredFiles = allFiles.filter((f) => !signalFiles.includes(f)).map((f) => f.path)
@@ -318,7 +319,7 @@ export async function runAnalyze(ctx: Context, options: AnalyzeOptions, deps: An
     meta.diffs = limitDiffs(await contextDiff(ctx.repoRoot, mb, meta.head.sha, order), order)
     lap('diffs')
     if (options.reviewers === true) {
-      meta.reviewers = await suggestReviewers(ctx, files, roleOf, mb, meta.head.sha)
+      meta.reviewers = await suggestReviewers(ctx, signalFiles, roleOf, mb, meta.head.sha)
       lap('reviewers')
     }
     ctx.log(`classification: ${result.classification}`)

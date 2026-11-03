@@ -77,6 +77,24 @@ describe('a rename out of production code', () => {
     expect(codes(o)).not.toContain('manifest-changed')
   })
 
+  it('suggests no reviewers for a file that moves to an ignored path', async () => {
+    const o = await analyzeVariant('17-test-only', cleanups, mv('src/lib/orphan.ts', 'src/legacy/orphan.ts'), (repo) => {
+      config(repo, { ignore: ['src/legacy/**'] })
+      repo.write('CODEOWNERS', '/src/legacy/ @acme/legacy\n')
+      withFile('src/lib/orphan.ts')(repo)
+    }, { reviewers: true })
+    expect(o.reviewers ?? []).not.toContainEqual(expect.objectContaining({ name: '@acme/legacy' }))
+  })
+
+  it('is a change of existing code when an ignored file moves to a test path', async () => {
+    const o = await app(mv('scripts/seed.ts', 'src/lib/seed.test.ts'), (repo) => {
+      config(repo, { ignore: ['scripts/**'] })
+      withFile('scripts/seed.ts')(repo)
+    })
+    expect(o.classification).toBe('touches-existing')
+    expect(o.reasons).toContainEqual(expect.objectContaining({ code: 'existing-file-renamed', file: 'src/lib/seed.test.ts' }))
+  })
+
   it('leaves out a rename when both of its paths are ignored', async () => {
     const o = await app(mv('src/legacy/a.ts', 'src/legacy/b.ts'), (repo) => {
       config(repo, { ignore: ['src/legacy/**'] })
