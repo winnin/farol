@@ -158,6 +158,7 @@ Milestones from `docs/SPEC.md`. Each one is done only when its acceptance criter
 - Checked on a real GraphQL PR: additive schema and resolver changes recognized, reach through services and loaders, diff coverage.
 
 ### Known limitations / open questions
+- A file renamed out of production code (to a test, story, excluded, outside or ignored path) is `touches-existing`, and an unchanged import of it written `./a.js` is `unresolved-import` (CHA-15044, DECISIONS 2026-11-03). Such a rename lists no affected entry points.
 - Context injection needs `backend.context`; without it, files reached only through `context.loaders` are "unreachable" (still `touches-existing`).
 - Across modules the unit is the module (an operation using one function of a service is affected by a change to another function of it).
 - An operation reaches every type it can return, so broad return types (User, Workspace…) make many operations "affected" by changes deep in the type graph.

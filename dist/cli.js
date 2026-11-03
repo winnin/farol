@@ -236634,7 +236634,7 @@ var ConfigSchema = external_exports.object({
   generated: globs.default([]),
   /** Where `farol usage` reads traffic from (optional). */
   datadog: DatadogSchema.optional(),
-  /** Changed files left out of every analysis (classification, dependencies, signals). Project-relative or repo-relative globs. */
+  /** Changed files left out of every analysis (classification, dependencies, signals). A rename from a path that is not ignored still counts for the classification. Project-relative or repo-relative globs. */
   ignore: globs.default([]),
   roles: external_exports.object({
     // Each key left out takes the default of the project's language (see the transform below).
@@ -237186,9 +237186,6 @@ async function loadContext(options) {
 // src/cli/analyze.ts
 import { readFileSync as readFileSync4 } from "fs";
 import { posix as posix17, resolve as resolve3 } from "path";
-
-// src/classify/classify.ts
-import { posix as posix3 } from "path";
 
 // src/routes/paths.ts
 var KEY_SEPARATOR = " > ";
@@ -237879,14 +237876,33 @@ function lockfileReason(file2, manifests, otherManifests) {
   return reason("lockfile-only-change", `lockfile ${file2.status}${why}: resolved versions may differ${unreadable([...manifests, ...coveredOthers])}`, file2.path);
 }
 
-// src/classify/classify.ts
+// src/classify/removed.ts
+import { posix as posix3 } from "path";
 function withoutExtension(path3) {
   const ext = posix3.extname(path3);
   return ext === "" ? path3 : path3.slice(0, -ext.length);
 }
+var SOURCES_OF_EMITTED = {
+  "": [".d.ts"],
+  ".js": [".ts", ".tsx", ".d.ts", ".jsx"],
+  ".jsx": [".ts", ".tsx", ".d.ts", ".js"],
+  ".mjs": [".mts", ".d.mts"],
+  ".cjs": [".cts", ".d.cts"]
+};
 function targetsRemoved(target, removed) {
-  return removed.some((r) => r === target || withoutExtension(r) === target || posix3.dirname(r) === target && posix3.basename(r).startsWith("index."));
+  const ext = posix3.extname(target);
+  const sources = new Set((SOURCES_OF_EMITTED[ext] ?? []).map((e) => withoutExtension(target) + e));
+  const isFolderIndex = (r) => posix3.dirname(r) === target && posix3.basename(r).startsWith("index.");
+  return removed.some((r) => r === target || withoutExtension(r) === target || sources.has(r) || isFolderIndex(r));
 }
+var NON_PRODUCTION_ROLES = /* @__PURE__ */ new Set(["test", "story", "excluded", "outside"]);
+function renamedOutOfProduction(file2, newRole, roleOf) {
+  if (file2.status !== "renamed") return false;
+  if (file2.oldPath === void 0) throw new Error(`internal: renamed file ${file2.path} has no old path`);
+  return NON_PRODUCTION_ROLES.has(newRole) && !NON_PRODUCTION_ROLES.has(roleOf(file2.oldPath));
+}
+
+// src/classify/classify.ts
 var AffectedCollector = class {
   byKey = /* @__PURE__ */ new Map();
   add(route, file2, chain) {
@@ -237946,7 +237962,7 @@ function classify(input2) {
   for (const r of addedRoutes) reasons.push(reason("route-added", input2.backend ? `new entry point ${r.key}${r.entry ? ` (registered in ${r.entry})` : ""}` : `${r.path} (${r.key}) renders ${r.entry ?? "nothing"}`, input2.routesFile === "" && !input2.routesFromDirectory ? void 0 : routeFileOf(r.key)));
   const dynamicRoutes = [...headRoutes.dynamic, ...(input2.baseRoutes?.dynamic ?? []).map((d) => ({ ...d, detail: `in the base version: ${d.detail}` }))];
   for (const d of dynamicRoutes) reasons.push(reason("dynamic-route", `line ${d.line}: ${d.detail}`, d.file));
-  const changed = new Set(input2.files.filter((f) => f.status !== "deleted").map((f) => f.path));
+  const changed = new Set(input2.files.filter((f) => f.status !== "deleted" && !input2.isIgnored(f.path)).map((f) => f.path));
   const removed = input2.files.flatMap((f) => f.status === "deleted" ? [f.path] : f.status === "renamed" && f.oldPath !== void 0 ? [f.oldPath] : []);
   for (const e of graph.parseErrors) if (changed.has(e.file)) reasons.push(reason("parse-error", `line ${e.line}: ${e.message}`, e.file));
   for (const u of graph.unresolved) {
@@ -237982,19 +237998,22 @@ function classify(input2) {
   const reachTargets = [];
   const newFiles = [];
   for (const file2 of input2.files) {
-    let role = input2.roleOf(file2.path);
+    const ignored = input2.isIgnored(file2.path);
+    let role = ignored ? "excluded" : input2.roleOf(file2.path);
     if (role === "outside") {
       if (file2.status !== "deleted" && nodes.has(file2.path)) role = "source";
       else {
         role = "excluded";
         reasons.push(reason("outside-project", "outside the project directory and not imported by the project", file2.path));
       }
-    } else if (role === "excluded") {
+    } else if (role === "excluded" && !ignored) {
       reasons.push(reason("file-excluded", 'matches "exclude" in the configuration', file2.path));
     }
     const out = { path: file2.path, status: file2.status, role, linesAdded: file2.added.length, linesRemoved: file2.removed.length };
     if (file2.oldPath !== void 0) out.oldPath = file2.oldPath;
     outputFiles.push(out);
+    const leaves = renamedOutOfProduction(file2, role, input2.roleOf);
+    if (leaves) reasons.push(reason("existing-file-renamed", `renamed from ${file2.oldPath}, which no longer counts as production code`, file2.path));
     if (role === "excluded" || role === "story") continue;
     if (role === "manifest") {
       const diff2 = input2.manifests.find((m) => m.manifest === file2.path);
@@ -238019,7 +238038,7 @@ function classify(input2) {
       continue;
     }
     if (role === "test") {
-      if (file2.status !== "added") reasons.push(reason("tests-modified", `existing test ${file2.status}, ${file2.removed.length} line(s) removed`, file2.path));
+      if (file2.status !== "added" && !leaves) reasons.push(reason("tests-modified", `existing test ${file2.status}, ${file2.removed.length} line(s) removed`, file2.path));
       continue;
     }
     if (file2.status === "added") {
@@ -238037,7 +238056,7 @@ function classify(input2) {
       continue;
     }
     if (file2.status === "renamed") {
-      reasons.push(reason("existing-file-renamed", `renamed from ${file2.oldPath ?? "?"}`, file2.path));
+      reasons.push(reason("existing-file-renamed", `renamed from ${file2.oldPath}`, file2.path));
       reachTargets.push({ path: file2.path, reportModified: false });
       continue;
     }
@@ -238589,7 +238608,7 @@ var OutputSchema = external_exports.object({
   classification: external_exports.enum(CLASSIFICATIONS),
   reasons: external_exports.array(ReasonSchema),
   files: external_exports.array(FileSchema),
-  /** Changed files left out of everything by "ignore" (configuration) or --ignore. */
+  /** Changed files whose path matches "ignore" (configuration) or --ignore: left out of everything, except that a rename from a path that is not ignored still counts for the classification. */
   ignoredFiles: external_exports.array(path2),
   dependencies: DependenciesSchema,
   risk: RiskSchema,
@@ -239678,8 +239697,9 @@ function testsModifiedSignal(files, roleOf) {
   const result = [];
   for (const f of files) {
     if (f.status === "added") continue;
-    const isTest = roleOf(f.path) === "test" || f.oldPath !== void 0 && roleOf(f.oldPath) === "test";
-    if (!isTest) continue;
+    const role = roleOf(f.path);
+    const isTest = role === "test" || f.oldPath !== void 0 && roleOf(f.oldPath) === "test";
+    if (!isTest || renamedOutOfProduction(f, role, roleOf)) continue;
     result.push({ path: f.path, ...f.oldPath === void 0 ? {} : { oldPath: f.oldPath }, status: f.status, linesRemoved: f.removed.length });
   }
   return { status: "ok", files: result.sort((a, b) => compareStrings(a.path, b.path)) };
@@ -252510,8 +252530,9 @@ async function runAnalyze(ctx, options, deps) {
     meta3.mergeBase = mb;
     const ignoredOf = createIgnoreOf(ctx, options.ignore ?? []);
     const allFiles = await diffFiles(ctx.repoRoot, mb, meta3.head.sha);
-    const files = allFiles.filter((f) => !ignoredOf(f.path));
-    meta3.ignoredFiles = allFiles.filter((f) => !files.includes(f)).map((f) => f.path);
+    const files = allFiles.filter((f) => !ignoredOf(f.path) || f.oldPath !== void 0 && !ignoredOf(f.oldPath));
+    const signalFiles = files.filter((f) => !ignoredOf(f.path));
+    meta3.ignoredFiles = allFiles.filter((f) => !signalFiles.includes(f)).map((f) => f.path);
     lap("diff");
     ctx.log(`${files.length} changed file(s) between ${mb.slice(0, 12)} and ${meta3.head.sha.slice(0, 12)}`);
     const wsTimings = {};
@@ -252530,7 +252551,7 @@ async function runAnalyze(ctx, options, deps) {
       Object.assign(timings, wsTimings);
       t = deps.clock();
       roleOf = createAnalysisRoleOf(ctx, langWs.graph.nodes);
-      const { manifests, otherManifests } = await projectAndOtherManifests(ctx, files, roleOf, mb, meta3.head.sha);
+      const { manifests, otherManifests } = await projectAndOtherManifests(ctx, signalFiles, roleOf, mb, meta3.head.sha);
       const headContents = await readFiles(ctx.repoRoot, meta3.head.sha, files.filter((f) => f.status !== "deleted").map((f) => f.path));
       const headFiles = new Set(await listFiles(ctx.repoRoot, meta3.head.sha));
       readHead = (path3) => headContents.get(path3);
@@ -252540,7 +252561,7 @@ async function runAnalyze(ctx, options, deps) {
       const helperContracts = helperContractChanges(langWs.base, langWs.head);
       contracts = contractsSection(helperContracts.changes, helperContracts.readable);
       lap("base");
-      result = classify({ files, roleOf, isGenerated: () => false, manifests, otherManifests, backend: { impacts: langWs.impacts }, graph: langWs.graph, routesFile: "", headRoutes: langWs.headRoutes, baseRoutes: langWs.baseRoutes, baseText: /* @__PURE__ */ new Map(), headText: /* @__PURE__ */ new Map() });
+      result = classify({ files, roleOf, isIgnored: ignoredOf, isGenerated: () => false, manifests, otherManifests, backend: { impacts: langWs.impacts }, graph: langWs.graph, routesFile: "", headRoutes: langWs.headRoutes, baseRoutes: langWs.baseRoutes, baseText: /* @__PURE__ */ new Map(), headText: /* @__PURE__ */ new Map() });
     } else {
       const ws = await loadWorkspace(ctx, meta3.head.sha, wsTimings, deps.clock);
       headRoutes = ws.routes;
@@ -252562,7 +252583,7 @@ async function runAnalyze(ctx, options, deps) {
         const routesBase = changedRoutesBase(files, ws);
         baseRoutes = routesBase === void 0 ? null : await baseRouteTable(ctx, ws, mb, routesBase);
       }
-      const { manifests, otherManifests } = await projectAndOtherManifests(ctx, files, roleOf, mb, meta3.head.sha);
+      const { manifests, otherManifests } = await projectAndOtherManifests(ctx, signalFiles, roleOf, mb, meta3.head.sha);
       const entryFiles = new Set(ws.backend?.configEntries.values());
       const isCode2 = (path3) => roleOf(path3) === "source" || entryFiles.has(path3);
       const tsModified = files.filter((f) => f.status === "modified" && isCode2(f.path) && TS_FILE.test(f.path)).map((f) => f.path);
@@ -252579,12 +252600,12 @@ async function runAnalyze(ctx, options, deps) {
       const existing = new Set((baseRoutes ?? ws.routes).routes.map((r) => r.key));
       const declImpactMap = declImpacts(baseOut, head, declChanged, () => true, { existing, erasedTypes: true });
       lap("base");
-      result = classify({ files, roleOf, isGenerated: createGeneratedMatcher(ctx.config.generated, ctx.projectPrefix, ctx.config.generated.length === 0 ? [] : await listFiles(ctx.repoRoot, meta3.head.sha)), manifests, otherManifests, typeOnlyFiles, declImpacts: declImpactMap, ...backend && ws.backend ? { backend: { impacts: backend.impacts, configEntries: ws.backend.configEntries } } : {}, graph: ws.graph, routesFile: ws.routesFile, ...ws.routesFromDirectory ? { routesFromDirectory: true } : {}, headRoutes: ws.routes, baseRoutes, baseText, headText });
+      result = classify({ files, roleOf, isIgnored: ignoredOf, isGenerated: createGeneratedMatcher(ctx.config.generated, ctx.projectPrefix, ctx.config.generated.length === 0 ? [] : await listFiles(ctx.repoRoot, meta3.head.sha)), manifests, otherManifests, typeOnlyFiles, declImpacts: declImpactMap, ...backend && ws.backend ? { backend: { impacts: backend.impacts, configEntries: ws.backend.configEntries } } : {}, graph: ws.graph, routesFile: ws.routesFile, ...ws.routesFromDirectory ? { routesFromDirectory: true } : {}, headRoutes: ws.routes, baseRoutes, baseText, headText });
     }
     for (const f of result.files) if (f.status === "added" && (f.role === "source" || f.role === "barrel") && isScriptFile(f.path) && isDeclarationsOnlyModule(f.path, readHead(f.path) ?? "x(")) f.declarationsOnly = true;
     lap("classify");
     const signalInputs = {
-      files,
+      files: signalFiles,
       roleOf,
       // Flags are relative to the current directory, configuration paths to the project directory.
       coverage: reportPath(ctx, options.coverage, ctx.config.signals.coverage),
@@ -252602,7 +252623,7 @@ async function runAnalyze(ctx, options, deps) {
       surface: ctx.config.surface,
       entries: headRoutes.routes.map((r) => ({ key: r.key, path: r.path, hasChildren: keys.some((k) => k.startsWith(`${r.key}${KEY_SEPARATOR}`)) })),
       affected: result.routes.affected.map((r) => r.key),
-      changedFiles: files.map((f) => f.path),
+      changedFiles: signalFiles.map((f) => f.path),
       callersOf: (contracts?.entries ?? []).map((e) => e.key)
     });
     if (usage) meta3.usage = usage;
@@ -252614,7 +252635,7 @@ async function runAnalyze(ctx, options, deps) {
     meta3.diffs = limitDiffs(await contextDiff(ctx.repoRoot, mb, meta3.head.sha, order), order);
     lap("diffs");
     if (options.reviewers === true) {
-      meta3.reviewers = await suggestReviewers(ctx, files, roleOf, mb, meta3.head.sha);
+      meta3.reviewers = await suggestReviewers(ctx, signalFiles, roleOf, mb, meta3.head.sha);
       lap("reviewers");
     }
     ctx.log(`classification: ${result.classification}`);
@@ -255880,7 +255901,7 @@ function buildProgram() {
     const fp = loadedFarolFile();
     return mergeOptions(cmd, opts, fp?.data[name], pathKeys(name), fp?.path);
   };
-  program3.command("analyze").description("run the pipeline between two refs and write the JSON result").option("--base <ref>", "base ref (the PR target)").option("--head <ref>", "head ref (the PR tip)").option("--coverage <file>", "coverage report: Istanbul JSON, Go coverprofile or coverage.py JSON (overrides signals.coverage)").option("--eslint <file>", "lint report: eslint -f json, biome lint --reporter=gitlab, golangci-lint JSON or ruff JSON (overrides signals.eslint)").option("--out <file>", "write the JSON here instead of stdout").option("--ignore <glob...>", 'leave matching changed files out of the analysis (adds to "ignore" in the configuration)').option("--pr <number>", "pull request number, for links to the PR diff (default: the GitHub Actions event)", positiveInt).option("--audit <file>", "vulnerability report: npm/pnpm audit --json, govulncheck -json or pip-audit JSON (overrides signals.audit)").option("--usage <file>", 'traffic per page/operation written by "farol usage" (overrides signals.usage); information only').option("--coverage-ignore <glob...>", "leave matching changed files out of diff coverage only (adds to signals.coverageIgnore)").option("--since <ref>", "incremental: analyze only the changes since this commit (e.g. the head you last reviewed)").option("--reviewers", "suggest reviewers from CODEOWNERS and the git history of the changed files").option("--cache-dir <dir>", "Go/Python: keep helper outputs here between runs (default: $FAROL_CACHE_DIR or ~/.cache/farol)").option("--no-cache", "Go/Python: read every tree again, without the cache").action(
+  program3.command("analyze").description("run the pipeline between two refs and write the JSON result").option("--base <ref>", "base ref (the PR target)").option("--head <ref>", "head ref (the PR tip)").option("--coverage <file>", "coverage report: Istanbul JSON, Go coverprofile or coverage.py JSON (overrides signals.coverage)").option("--eslint <file>", "lint report: eslint -f json, biome lint --reporter=gitlab, golangci-lint JSON or ruff JSON (overrides signals.eslint)").option("--out <file>", "write the JSON here instead of stdout").option("--ignore <glob...>", 'leave matching changed files out of the analysis; a rename into a matching path still counts for the class (adds to "ignore" in the configuration)').option("--pr <number>", "pull request number, for links to the PR diff (default: the GitHub Actions event)", positiveInt).option("--audit <file>", "vulnerability report: npm/pnpm audit --json, govulncheck -json or pip-audit JSON (overrides signals.audit)").option("--usage <file>", 'traffic per page/operation written by "farol usage" (overrides signals.usage); information only').option("--coverage-ignore <glob...>", "leave matching changed files out of diff coverage only (adds to signals.coverageIgnore)").option("--since <ref>", "incremental: analyze only the changes since this commit (e.g. the head you last reviewed)").option("--reviewers", "suggest reviewers from CODEOWNERS and the git history of the changed files").option("--cache-dir <dir>", "Go/Python: keep helper outputs here between runs (default: $FAROL_CACHE_DIR or ~/.cache/farol)").option("--no-cache", "Go/Python: read every tree again, without the cache").action(
     (raw, cmd) => runAction(async () => {
       const opts = withFarolFile("analyze", cmd, raw);
       const options = { ...opts, base: required2(opts.base, "--base", "analyze"), head: required2(opts.head, "--head", "analyze") };
@@ -255923,7 +255944,7 @@ function buildProgram() {
       return calibrateCommand({ ...opts, history: required2(opts.history, "--history", "calibrate") });
     })
   );
-  program3.command("history").description("run analyze for every merge commit of a branch since a date and write one JSON per merge plus a summary").option("--since <date>", "only merges after this date (anything git log --since accepts)").option("--branch <name>", "branch to walk", "HEAD").option("--out <dir>", "output directory", "farol-history").option("--ignore <glob...>", 'leave matching changed files out of the analysis (adds to "ignore" in the configuration)').option("--first-parent", "analyze every first-parent commit instead of merge commits only (squash-merge repositories)", false).action(
+  program3.command("history").description("run analyze for every merge commit of a branch since a date and write one JSON per merge plus a summary").option("--since <date>", "only merges after this date (anything git log --since accepts)").option("--branch <name>", "branch to walk", "HEAD").option("--out <dir>", "output directory", "farol-history").option("--ignore <glob...>", 'leave matching changed files out of the analysis; a rename into a matching path still counts for the class (adds to "ignore" in the configuration)').option("--first-parent", "analyze every first-parent commit instead of merge commits only (squash-merge repositories)", false).action(
     (raw, cmd) => runAction(async () => {
       const opts = withFarolFile("history", cmd, raw);
       const options = { branch: "HEAD", out: "farol-history", ...opts, since: required2(opts.since, "--since", "history") };

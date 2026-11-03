@@ -1,4 +1,3 @@
-import { posix } from 'node:path'
 import type { ChangedFile } from '../git/types.js'
 import { compareStrings, sortedUnique } from '../output/order.js'
 import type { AddedRoute, AffectedRoute, Dependencies, OutputFile, UnresolvedImportOut } from '../output/schema.js'
@@ -14,11 +13,14 @@ import { computeRisk, type FileRisk } from './risk.js'
 import type { BackendFileImpact } from '../backend/impact.js'
 import { describeChange, sortChanges, type ManifestResult } from './dependencies.js'
 import { lockfileReason } from './lockfile.js'
+import { renamedOutOfProduction, targetsRemoved } from './removed.js'
 
 export interface ClassifyInput {
   files: readonly ChangedFile[]
   /** Role of a repo-relative path; `outside` for files outside the project directory. */
   roleOf: (repoPath: string) => AnalysisRole | 'outside'
+  /** Whether a changed path matches `ignore`: such a file is here only as a rename from a path that is not ignored. */
+  isIgnored: (repoPath: string) => boolean
   /** Whether an import target (repo-relative, as written) is generated code that git ignores (`generated` globs). */
   isGenerated: (repoPath: string) => boolean
   /** Modified files that only declare types in base and head (erased at compile time). */
@@ -52,16 +54,6 @@ export interface ClassifyResult {
   dependencies: Dependencies
   risk: { totalPages: number; files: FileRisk[]; summary: { high: number; medium: number; low: number } }
   diagnostics: { unresolvedImports: UnresolvedImportOut[]; dynamicRoutes: DynamicRoute[]; parseErrors: ParseError[] }
-}
-
-function withoutExtension(path: string): string {
-  const ext = posix.extname(path)
-  return ext === '' ? path : path.slice(0, -ext.length)
-}
-
-/** Whether an unresolved specifier target could have pointed at a file this PR deleted or renamed away. */
-function targetsRemoved(target: string, removed: readonly string[]): boolean {
-  return removed.some((r) => r === target || withoutExtension(r) === target || (posix.dirname(r) === target && posix.basename(r).startsWith('index.')))
 }
 
 class AffectedCollector {
@@ -137,7 +129,8 @@ export function classify(input: ClassifyInput): ClassifyResult {
   const dynamicRoutes = [...headRoutes.dynamic, ...(input.baseRoutes?.dynamic ?? []).map((d) => ({ ...d, detail: `in the base version: ${d.detail}` }))]
   for (const d of dynamicRoutes) reasons.push(reason('dynamic-route', `line ${d.line}: ${d.detail}`, d.file))
 
-  const changed = new Set(input.files.filter((f) => f.status !== 'deleted').map((f) => f.path))
+  // An ignored new path is only a rename out: its parse errors and imports do not count.
+  const changed = new Set(input.files.filter((f) => f.status !== 'deleted' && !input.isIgnored(f.path)).map((f) => f.path))
   const removed = input.files.flatMap((f) => (f.status === 'deleted' ? [f.path] : f.status === 'renamed' && f.oldPath !== undefined ? [f.oldPath] : []))
   for (const e of graph.parseErrors) if (changed.has(e.file)) reasons.push(reason('parse-error', `line ${e.line}: ${e.message}`, e.file))
   for (const u of graph.unresolved) {
@@ -180,19 +173,23 @@ export function classify(input: ClassifyInput): ClassifyResult {
   const newFiles: string[] = []
 
   for (const file of input.files) {
-    let role = input.roleOf(file.path)
+    const ignored = input.isIgnored(file.path)
+    let role = ignored ? 'excluded' : input.roleOf(file.path)
     if (role === 'outside') {
       if (file.status !== 'deleted' && nodes.has(file.path)) role = 'source'
       else {
         role = 'excluded'
         reasons.push(reason('outside-project', 'outside the project directory and not imported by the project', file.path))
       }
-    } else if (role === 'excluded') {
+    } else if (role === 'excluded' && !ignored) {
       reasons.push(reason('file-excluded', 'matches "exclude" in the configuration', file.path))
     }
     const out: OutputFile = { path: file.path, status: file.status, role, linesAdded: file.added.length, linesRemoved: file.removed.length }
     if (file.oldPath !== undefined) out.oldPath = file.oldPath
     outputFiles.push(out)
+    // `role` is resolved here: a file outside the project is `source` when the project imports it, else `excluded`.
+    const leaves = renamedOutOfProduction(file, role, input.roleOf)
+    if (leaves) reasons.push(reason('existing-file-renamed', `renamed from ${file.oldPath}, which no longer counts as production code`, file.path))
 
     if (role === 'excluded' || role === 'story') continue
     if (role === 'manifest') {
@@ -219,7 +216,7 @@ export function classify(input: ClassifyInput): ClassifyResult {
       continue
     }
     if (role === 'test') {
-      if (file.status !== 'added') reasons.push(reason('tests-modified', `existing test ${file.status}, ${file.removed.length} line(s) removed`, file.path))
+      if (file.status !== 'added' && !leaves) reasons.push(reason('tests-modified', `existing test ${file.status}, ${file.removed.length} line(s) removed`, file.path))
       continue
     }
     if (file.status === 'added') {
@@ -238,7 +235,7 @@ export function classify(input: ClassifyInput): ClassifyResult {
       continue
     }
     if (file.status === 'renamed') {
-      reasons.push(reason('existing-file-renamed', `renamed from ${file.oldPath ?? '?'}`, file.path))
+      reasons.push(reason('existing-file-renamed', `renamed from ${file.oldPath}`, file.path))
       reachTargets.push({ path: file.path, reportModified: false })
       continue
     }
