@@ -236449,26 +236449,37 @@ function date4(params) {
 
 // src/config/schema.ts
 var glob = external_exports.string().min(1, "glob patterns cannot be empty");
-function isRooted(g) {
-  if (g.startsWith("/")) return true;
-  if (!g.startsWith("{")) return false;
-  const alternatives = [];
-  let depth = 0;
-  let start = 1;
-  for (let i = 0; i < g.length; i++) {
-    const c = g[i];
-    if (c === "\\") i++;
-    else if (c === "{") depth++;
-    else if (c === "," && depth === 1) {
-      alternatives.push(g.slice(start, i));
-      start = i + 1;
-    } else if (c === "}" && --depth === 0) {
-      alternatives.push(g.slice(start, i));
-      return alternatives.some((a) => isRooted(a + g.slice(i + 1)));
+function scanStart(g, from, nested) {
+  let slash = false;
+  let empty = true;
+  let i = from;
+  while (i < g.length && !(nested && (g[i] === "," || g[i] === "}"))) {
+    if (g[i] === "{") {
+      let groupSlash = false;
+      let groupEmpty = false;
+      let j = i + 1;
+      for (; ; ) {
+        const alternative = scanStart(g, j, true);
+        groupSlash ||= alternative.slash;
+        groupEmpty ||= alternative.empty;
+        j = alternative.end;
+        if (j >= g.length || g[j] === "}") break;
+        j++;
+      }
+      if (j < g.length) {
+        if (empty) slash ||= groupSlash;
+        empty &&= groupEmpty;
+        i = j + 1;
+        continue;
+      }
     }
+    if (empty && g[i] === "/") slash = true;
+    empty = false;
+    i += g[i] === "\\" ? 2 : 1;
   }
-  return false;
+  return { slash, empty, end: i };
 }
+var isRooted = (g) => scanStart(g, 0, false).slash;
 var pathGlob = glob.refine((g) => !isRooted(g), 'write the glob relative to the project or repository, with no leading "/"');
 var globs = external_exports.array(pathGlob);
 var ENTRY_KINDS = ["JOB", "CONSUMER", "RPC", "RUN"];

@@ -120,6 +120,13 @@ describe('path globs', () => {
   ])('rejects a glob with a leading "/" in %s, which matches no changed file', (_key, config) => {
     expect(() => parseConfig(JSON.stringify(config), 'c')).toThrow(/leading "\/"/)
   })
+
+  it('checks a glob of many empty brace groups in linear time', () => {
+    const glob = `${'{,}'.repeat(40)}a.ts`
+    const start = performance.now()
+    expect(parseConfig(JSON.stringify({ surface: 'backend', ignore: [glob] }), 'c').ignore).toEqual([glob])
+    expect(performance.now() - start).toBeLessThan(1000)
+  })
 })
 
 describe('generated import targets', () => {

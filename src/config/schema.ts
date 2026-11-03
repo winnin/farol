@@ -2,29 +2,46 @@ import { z } from 'zod'
 
 const glob = z.string().min(1, 'glob patterns cannot be empty')
 /**
- * Whether a brace expansion of the glob starts with "/" (`/a`, `{a,/b}`, `{,x}/a`). Changed files have relative paths,
- * so such a glob never matches. Only a group at the start counts: text before a brace is a prefix (`src{/,/a/}*.ts`).
+ * Reads a glob, or one brace alternative of it (`nested`), from `from`: whether one of its brace expansions can start
+ * with "/", and whether one can be empty. One pass, so a glob of many groups takes linear time.
  */
-function isRooted(g: string): boolean {
-  if (g.startsWith('/')) return true
-  if (!g.startsWith('{')) return false
-  const alternatives: string[] = []
-  let depth = 0
-  let start = 1
-  for (let i = 0; i < g.length; i++) {
-    const c = g[i]
-    if (c === '\\') i++
-    else if (c === '{') depth++
-    else if (c === ',' && depth === 1) {
-      alternatives.push(g.slice(start, i))
-      start = i + 1
-    } else if (c === '}' && --depth === 0) {
-      alternatives.push(g.slice(start, i))
-      return alternatives.some((a) => isRooted(a + g.slice(i + 1)))
+function scanStart(g: string, from: number, nested: boolean): { slash: boolean; empty: boolean; end: number } {
+  let slash = false
+  let empty = true
+  let i = from
+  while (i < g.length && !(nested && (g[i] === ',' || g[i] === '}'))) {
+    if (g[i] === '{') {
+      let groupSlash = false
+      let groupEmpty = false
+      let j = i + 1
+      for (;;) {
+        const alternative = scanStart(g, j, true)
+        groupSlash ||= alternative.slash
+        groupEmpty ||= alternative.empty
+        j = alternative.end
+        if (j >= g.length || g[j] === '}') break
+        j++
+      }
+      if (j < g.length) {
+        if (empty) slash ||= groupSlash
+        empty &&= groupEmpty
+        i = j + 1
+        continue
+      }
+      // An unclosed "{" is a literal character.
     }
+    if (empty && g[i] === '/') slash = true
+    empty = false
+    i += g[i] === '\\' ? 2 : 1
   }
-  return false // an unclosed "{" is a literal character
+  return { slash, empty, end: i }
 }
+
+/**
+ * Whether a brace expansion of the glob starts with "/" (`/a`, `{a,/b}`, `{,x}/a`). Changed files have relative paths,
+ * so such a glob never matches. Text before a brace is a prefix (`src{/,/a/}*.ts`).
+ */
+const isRooted = (g: string): boolean => scanStart(g, 0, false).slash
 const pathGlob = glob.refine((g) => !isRooted(g), 'write the glob relative to the project or repository, with no leading "/"')
 const globs = z.array(pathGlob)
 
