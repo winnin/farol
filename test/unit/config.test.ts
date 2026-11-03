@@ -112,6 +112,16 @@ describe('backend entry points', () => {
   })
 })
 
+describe('path globs', () => {
+  it.each([
+    ['roles.global', { roles: { global: ['/src/App.tsx'] } }],
+    ['ignore', { ignore: ['{src/a/**,/legacy/**}'] }],
+    ['exclude', { exclude: ['{a/**,/b/**}'] }],
+  ])('rejects a glob with a leading "/" in %s, which matches no changed file', (_key, config) => {
+    expect(() => parseConfig(JSON.stringify(config), 'c')).toThrow(/leading "\/"/)
+  })
+})
+
 describe('generated import targets', () => {
   const head = ['apps/api/src/lib/format.ts', 'apps/api/src/generated/.gitkeep', 'src/lib/a.ts']
 

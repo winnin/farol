@@ -1,8 +1,22 @@
 import ts from 'typescript'
 
+/** A TypeScript source file (declaration files included). */
+export const TS_FILE = /\.(ts|tsx|mts|cts)$/
+
 /** `import type …` (the `isTypeOnly` flag is deprecated in TypeScript 6 in favor of `phaseModifier`). */
 export function isTypeOnlyImport(clause: ts.ImportClause): boolean {
   return clause.phaseModifier === ts.SyntaxKind.TypeKeyword
+}
+
+/**
+ * Whether the emitter keeps an import or export statement that names only inline types (`import { type A } from './a'`),
+ * so its module still runs. `import type` and `export type` statements are erased in every mode.
+ */
+export function keepsInlineTypeStatements(options: ts.CompilerOptions): boolean {
+  // `preserveValueImports` and `importsNotUsedAsValues` are deprecated in TypeScript 6, but older compilers of the
+  // analyzed project still honor them. Parsed enum values: 1 = preserve, 2 = error.
+  const old = options as { preserveValueImports?: unknown; importsNotUsedAsValues?: unknown }
+  return options.verbatimModuleSyntax === true || old.preserveValueImports === true || old.importsNotUsedAsValues === 1 || old.importsNotUsedAsValues === 2
 }
 
 /** `baseUrl` is deprecated in TypeScript 6 but projects still use it, and resolution still honors it. */

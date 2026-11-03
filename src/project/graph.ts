@@ -3,7 +3,7 @@ import { posix } from 'node:path'
 import { compareStrings } from '../output/order.js'
 import { isProjectPath, toPosix } from './fs.js'
 import type { ProjectProgram } from './program.js'
-import { isTypeOnlyImport } from './parse.js'
+import { isTypeOnlyImport, keepsInlineTypeStatements } from './parse.js'
 import { resolveSpecifier, specifierTarget, type Resolution } from './resolve.js'
 
 /**
@@ -70,12 +70,15 @@ class GraphBuilder {
   private readonly edges = new Map<string, GraphEdge>()
   private readonly unresolved: UnresolvedImport[] = []
   private readonly checker: ts.TypeChecker
+  /** The emitter keeps `import { type A } from "./x"`: `./x` still runs. */
+  private readonly keepsInlineTypes: boolean
 
   constructor(
     private readonly project: ProjectProgram,
     private readonly options: GraphOptions,
   ) {
     this.checker = project.program.getTypeChecker()
+    this.keepsInlineTypes = keepsInlineTypeStatements(project.options)
   }
 
   rel(file: string): string {
@@ -144,7 +147,10 @@ class GraphBuilder {
     const named = clause.namedBindings && ts.isNamedImports(clause.namedBindings) ? clause.namedBindings.elements.filter((e) => !e.isTypeOnly) : []
     const namespace = clause.namedBindings && ts.isNamespaceImport(clause.namedBindings) ? clause.namedBindings : undefined
     const allTypes = clause.namedBindings && ts.isNamedImports(clause.namedBindings) && clause.namedBindings.elements.length > 0 && named.length === 0
-    if (!clause.name && !namespace && allTypes) return
+    if (!clause.name && !namespace && allTypes) {
+      if (this.keepsInlineTypes) this.link(sf, from, node.moduleSpecifier, 'side-effect')
+      return
+    }
     const r = this.resolve(sf, node.moduleSpecifier)
     if (r.kind !== 'module') {
       this.link(sf, from, node.moduleSpecifier, 'static')
@@ -168,7 +174,10 @@ class GraphBuilder {
   visitExport(sf: ts.SourceFile, from: string, node: ts.ExportDeclaration): void {
     if (!node.moduleSpecifier || !ts.isStringLiteralLike(node.moduleSpecifier) || node.isTypeOnly) return
     const clause = node.exportClause
-    if (clause && ts.isNamedExports(clause) && clause.elements.length > 0 && clause.elements.every((e) => e.isTypeOnly)) return
+    if (clause && ts.isNamedExports(clause) && clause.elements.length > 0 && clause.elements.every((e) => e.isTypeOnly)) {
+      if (this.keepsInlineTypes) this.link(sf, from, node.moduleSpecifier, 'side-effect')
+      return
+    }
     this.link(sf, from, node.moduleSpecifier, 'reexport')
   }
 

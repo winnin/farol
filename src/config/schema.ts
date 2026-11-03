@@ -1,13 +1,17 @@
 import { z } from 'zod'
 
 const glob = z.string().min(1, 'glob patterns cannot be empty')
-const globs = z.array(glob)
+/** A leading "/", also as a brace alternative (`{a,/b}`): changed files have relative paths, so it never matches. */
+const ROOTED = /(^|[{,])\//
+const pathGlob = glob.refine((g) => !ROOTED.test(g), 'write the glob relative to the project or repository, with no leading "/"')
+const globs = z.array(pathGlob)
 
 /** Kinds of the entry points a TypeScript backend names in `backend.entries`. */
 export const ENTRY_KINDS = ['JOB', 'CONSUMER', 'RPC', 'RUN'] as const
 // `!(a).ts` is a positive glob; `{./a,b}` holds a segment like any other.
-const isRelativePositive = (g: string): boolean => (!g.startsWith('!') || g.startsWith('!(')) && !/(^|[{,])\//.test(g) && !g.split(/[/{},]/).some((seg) => seg === '.' || seg === '..')
-const entryGlob = glob.refine(isRelativePositive, 'write a positive glob relative to the project, with no "!", "./", "../" or leading "/"')
+const isPositive = (g: string): boolean => !g.startsWith('!') || g.startsWith('!(')
+const hasDotSegment = (g: string): boolean => g.split(/[/{},]/).some((seg) => seg === '.' || seg === '..')
+const entryGlob = pathGlob.refine((g) => isPositive(g) && !hasDotSegment(g), 'write a positive glob relative to the project, with no "!", "./" or "../"')
 
 /**
  * Environment, infrastructure and CI files (deploy-time configuration, not code): matched anywhere in the repository,

@@ -9,6 +9,7 @@ import { buildOutput, failureOutput, type OutputMeta } from '../output/build.js'
 import type { Output } from '../output/schema.js'
 import { serializeOutput, writeTextFile } from '../output/write.js'
 import { createTreeFileSystem, toPosix } from '../project/fs.js'
+import { TS_FILE } from '../project/parse.js'
 import { createResolverContext } from '../project/resolve.js'
 import type { RouteTable } from '../routes/types.js'
 import { computeSignals, computeUsage, type SignalInputs } from './signals.js'
@@ -260,17 +261,17 @@ export async function runAnalyze(ctx: Context, options: AnalyzeOptions, deps: An
       }
       const { manifests, otherManifests } = await projectAndOtherManifests(ctx, files, roleOf, mb, meta.head.sha)
       const entryFiles = new Set(ws.backend?.configEntries.values())
-      const tsModified = files.filter((f) => f.status === 'modified' && (roleOf(f.path) === 'source' || entryFiles.has(f.path)) && /\.(ts|tsx|mts|cts)$/.test(f.path)).map((f) => f.path)
+      const isCode = (path: string): boolean => roleOf(path) === 'source' || entryFiles.has(path)
+      const tsModified = files.filter((f) => f.status === 'modified' && isCode(f.path) && TS_FILE.test(f.path)).map((f) => f.path)
       const tsBase = await readFiles(ctx.repoRoot, mb, tsModified)
       const tsHead = await readFiles(ctx.repoRoot, meta.head.sha, tsModified)
-      const verbatim = ws.project.options.verbatimModuleSyntax === true
-      const typeOnlyFiles = new Set(tsModified.filter((p) => isTypeOnlyModule(p, tsBase.get(p) ?? 'x', verbatim) && isTypeOnlyModule(p, tsHead.get(p) ?? 'x', verbatim)))
+      const typeOnlyFiles = new Set(tsModified.filter((p) => isTypeOnlyModule(p, tsBase.get(p) ?? 'x', ws.project.options) && isTypeOnlyModule(p, tsHead.get(p) ?? 'x', ws.project.options)))
       // Declaration-level reach of changed TypeScript source files (renamed files keep the file graph: their
       // declaration ids change with the path). JavaScript keeps the file graph too: CommonJS and
       // globals (global.X = require(...)) are only followed there. Type-only files keep their own rule.
       // Frontends only: backends (often CommonJS with globals set at bootstrap) keep the file graph and the
       // resolver-level impacts, which follow globals the declaration graph would merge into the bootstrap code.
-      const declChanged = ws.backend ? [] : files.filter((f) => f.status !== 'renamed' && roleOf(f.path) === 'source' && /\.(ts|tsx|mts|cts)$/.test(f.path) && !typeOnlyFiles.has(f.path))
+      const declChanged = ws.backend ? [] : files.filter((f) => f.status !== 'renamed' && roleOf(f.path) === 'source' && TS_FILE.test(f.path) && !typeOnlyFiles.has(f.path))
       const declBaseText = await readFiles(ctx.repoRoot, mb, declChanged.filter((f) => f.status !== 'added').map((f) => f.oldPath ?? f.path))
       const head = declChanged.length === 0 ? { module: '', files: [], decls: [], edges: [], entries: [], problems: [], comments: [] } : tsDeclGraph({ project: ws.project, repoRoot: toPosix(ctx.repoRoot), isOrigin: (p) => { const r = roleOf(p); return r !== 'test' && r !== 'story' && r !== 'excluded' && r !== 'outside' }, routes: ws.routes })
       const baseOut = { module: '', files: [], decls: [...declBaseText].flatMap(([p, code]) => baseDecls(p, code)), edges: [], entries: [], problems: [], comments: [] }

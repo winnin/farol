@@ -236449,10 +236449,13 @@ function date4(params) {
 
 // src/config/schema.ts
 var glob = external_exports.string().min(1, "glob patterns cannot be empty");
-var globs = external_exports.array(glob);
+var ROOTED = /(^|[{,])\//;
+var pathGlob = glob.refine((g) => !ROOTED.test(g), 'write the glob relative to the project or repository, with no leading "/"');
+var globs = external_exports.array(pathGlob);
 var ENTRY_KINDS = ["JOB", "CONSUMER", "RPC", "RUN"];
-var isRelativePositive = (g) => (!g.startsWith("!") || g.startsWith("!(")) && !/(^|[{,])\//.test(g) && !g.split(/[/{},]/).some((seg) => seg === "." || seg === "..");
-var entryGlob = glob.refine(isRelativePositive, 'write a positive glob relative to the project, with no "!", "./", "../" or leading "/"');
+var isPositive = (g) => !g.startsWith("!") || g.startsWith("!(");
+var hasDotSegment = (g) => g.split(/[/{},]/).some((seg) => seg === "." || seg === "..");
+var entryGlob = pathGlob.refine((g) => isPositive(g) && !hasDotSegment(g), 'write a positive glob relative to the project, with no "!", "./" or "../"');
 var DEFAULT_INFRA = [
   "**/.env",
   "**/.env.*",
@@ -237235,8 +237238,13 @@ import { isDeepStrictEqual } from "util";
 
 // src/project/parse.ts
 var import_typescript = __toESM(require_typescript(), 1);
+var TS_FILE = /\.(ts|tsx|mts|cts)$/;
 function isTypeOnlyImport(clause) {
   return clause.phaseModifier === import_typescript.default.SyntaxKind.TypeKeyword;
+}
+function keepsInlineTypeStatements(options) {
+  const old = options;
+  return options.verbatimModuleSyntax === true || old.preserveValueImports === true || old.importsNotUsedAsValues === 1 || old.importsNotUsedAsValues === 2;
 }
 function getBaseUrl(options) {
   const value = options.baseUrl;
@@ -237481,14 +237489,18 @@ function checkI18nAdditive(baseText, headText) {
   compareJson(base, head, "", problems);
   return { additive: problems.length === 0, problems };
 }
-function isTypeOnlyModule(file2, code2, verbatimModuleSyntax) {
-  if (!/\.(ts|tsx|mts|cts)$/.test(file2)) return false;
+function namesOnlyInlineTypes(s) {
+  return s.exportClause !== void 0 && import_typescript2.default.isNamedExports(s.exportClause) && s.exportClause.elements.every((e) => e.isTypeOnly);
+}
+function isTypeOnlyModule(file2, code2, options) {
+  const keeps = keepsInlineTypeStatements(options);
+  if (!TS_FILE.test(file2)) return false;
   const { sourceFile: sf, errors } = parseIsolated(file2, code2);
   if (errors.length > 0) return false;
   return sf.statements.every((s) => {
     if (import_typescript2.default.isInterfaceDeclaration(s) || import_typescript2.default.isTypeAliasDeclaration(s)) return true;
-    if (import_typescript2.default.isImportDeclaration(s)) return s.importClause !== void 0 && (!verbatimModuleSyntax || s.importClause.phaseModifier === import_typescript2.default.SyntaxKind.TypeKeyword);
-    if (import_typescript2.default.isExportDeclaration(s)) return s.isTypeOnly || !verbatimModuleSyntax && s.exportClause !== void 0 && import_typescript2.default.isNamedExports(s.exportClause) && s.exportClause.elements.every((e) => e.isTypeOnly);
+    if (import_typescript2.default.isImportDeclaration(s)) return s.importClause !== void 0 && (!keeps || isTypeOnlyImport(s.importClause));
+    if (import_typescript2.default.isExportDeclaration(s)) return s.isTypeOnly || !keeps && namesOnlyInlineTypes(s);
     const modifiers = import_typescript2.default.canHaveModifiers(s) ? import_typescript2.default.getModifiers(s) ?? [] : [];
     return modifiers.some((m) => m.kind === import_typescript2.default.SyntaxKind.DeclareKeyword) && !import_typescript2.default.isEnumDeclaration(s) && !import_typescript2.default.isVariableStatement(s);
   });
@@ -250692,6 +250704,7 @@ var GraphBuilder = class {
     this.project = project;
     this.options = options;
     this.checker = project.program.getTypeChecker();
+    this.keepsInlineTypes = keepsInlineTypeStatements(project.options);
   }
   project;
   options;
@@ -250699,6 +250712,8 @@ var GraphBuilder = class {
   edges = /* @__PURE__ */ new Map();
   unresolved = [];
   checker;
+  /** The emitter keeps `import { type A } from "./x"`: `./x` still runs. */
+  keepsInlineTypes;
   rel(file2) {
     return posix11.relative(this.options.repoRoot, toPosix(file2));
   }
@@ -250757,7 +250772,10 @@ var GraphBuilder = class {
     const named = clause.namedBindings && import_typescript18.default.isNamedImports(clause.namedBindings) ? clause.namedBindings.elements.filter((e) => !e.isTypeOnly) : [];
     const namespace = clause.namedBindings && import_typescript18.default.isNamespaceImport(clause.namedBindings) ? clause.namedBindings : void 0;
     const allTypes = clause.namedBindings && import_typescript18.default.isNamedImports(clause.namedBindings) && clause.namedBindings.elements.length > 0 && named.length === 0;
-    if (!clause.name && !namespace && allTypes) return;
+    if (!clause.name && !namespace && allTypes) {
+      if (this.keepsInlineTypes) this.link(sf, from, node2.moduleSpecifier, "side-effect");
+      return;
+    }
     const r = this.resolve(sf, node2.moduleSpecifier);
     if (r.kind !== "module") {
       this.link(sf, from, node2.moduleSpecifier, "static");
@@ -250780,7 +250798,10 @@ var GraphBuilder = class {
   visitExport(sf, from, node2) {
     if (!node2.moduleSpecifier || !import_typescript18.default.isStringLiteralLike(node2.moduleSpecifier) || node2.isTypeOnly) return;
     const clause = node2.exportClause;
-    if (clause && import_typescript18.default.isNamedExports(clause) && clause.elements.length > 0 && clause.elements.every((e) => e.isTypeOnly)) return;
+    if (clause && import_typescript18.default.isNamedExports(clause) && clause.elements.length > 0 && clause.elements.every((e) => e.isTypeOnly)) {
+      if (this.keepsInlineTypes) this.link(sf, from, node2.moduleSpecifier, "side-effect");
+      return;
+    }
     this.link(sf, from, node2.moduleSpecifier, "reexport");
   }
   visitCalls(sf, from) {
@@ -252497,12 +252518,12 @@ async function runAnalyze(ctx, options, deps) {
       }
       const { manifests, otherManifests } = await projectAndOtherManifests(ctx, files, roleOf, mb, meta3.head.sha);
       const entryFiles = new Set(ws.backend?.configEntries.values());
-      const tsModified = files.filter((f) => f.status === "modified" && (roleOf(f.path) === "source" || entryFiles.has(f.path)) && /\.(ts|tsx|mts|cts)$/.test(f.path)).map((f) => f.path);
+      const isCode2 = (path3) => roleOf(path3) === "source" || entryFiles.has(path3);
+      const tsModified = files.filter((f) => f.status === "modified" && isCode2(f.path) && TS_FILE.test(f.path)).map((f) => f.path);
       const tsBase = await readFiles(ctx.repoRoot, mb, tsModified);
       const tsHead = await readFiles(ctx.repoRoot, meta3.head.sha, tsModified);
-      const verbatim = ws.project.options.verbatimModuleSyntax === true;
-      const typeOnlyFiles = new Set(tsModified.filter((p) => isTypeOnlyModule(p, tsBase.get(p) ?? "x", verbatim) && isTypeOnlyModule(p, tsHead.get(p) ?? "x", verbatim)));
-      const declChanged = ws.backend ? [] : files.filter((f) => f.status !== "renamed" && roleOf(f.path) === "source" && /\.(ts|tsx|mts|cts)$/.test(f.path) && !typeOnlyFiles.has(f.path));
+      const typeOnlyFiles = new Set(tsModified.filter((p) => isTypeOnlyModule(p, tsBase.get(p) ?? "x", ws.project.options) && isTypeOnlyModule(p, tsHead.get(p) ?? "x", ws.project.options)));
+      const declChanged = ws.backend ? [] : files.filter((f) => f.status !== "renamed" && roleOf(f.path) === "source" && TS_FILE.test(f.path) && !typeOnlyFiles.has(f.path));
       const declBaseText = await readFiles(ctx.repoRoot, mb, declChanged.filter((f) => f.status !== "added").map((f) => f.oldPath ?? f.path));
       const head = declChanged.length === 0 ? { module: "", files: [], decls: [], edges: [], entries: [], problems: [], comments: [] } : tsDeclGraph({ project: ws.project, repoRoot: toPosix(ctx.repoRoot), isOrigin: (p) => {
         const r = roleOf(p);
