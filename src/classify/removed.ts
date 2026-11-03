@@ -10,8 +10,8 @@ function withoutExtension(path: string): string {
 /** Source and declaration extensions an import can point at, by the extension it is written with (`./a.js`, `./a`). */
 const SOURCES_OF_EMITTED: Readonly<Record<string, readonly string[]>> = {
   '': ['.d.ts'],
-  '.js': ['.ts', '.tsx', '.jsx', '.d.ts'],
-  '.jsx': ['.tsx', '.d.ts'],
+  '.js': ['.ts', '.tsx', '.d.ts', '.jsx'],
+  '.jsx': ['.ts', '.tsx', '.d.ts', '.js'],
   '.mjs': ['.mts', '.d.mts'],
   '.cjs': ['.cts', '.d.cts'],
 }

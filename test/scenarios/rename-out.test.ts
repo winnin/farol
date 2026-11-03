@@ -67,6 +67,16 @@ describe('a rename out of production code', () => {
     expect(o.ignoredFiles).toEqual(['src/legacy/a.test.ts'])
   })
 
+  it('reads a file that moves to an ignored path only as a rename out', async () => {
+    const o = await app(mv('src/pkg/package.json', 'src/legacy/package.json'), (repo) => {
+      config(repo, { ignore: ['src/legacy/**'] })
+      repo.write('src/pkg/package.json', JSON.stringify({ name: 'pkg', version: '1.0.0', dependencies: { lodash: '4.17.21' } }, null, 2))
+    })
+    expect(o.classification).toBe('touches-existing')
+    expect(o.reasons).toContainEqual(expect.objectContaining({ code: 'existing-file-renamed', file: 'src/legacy/package.json' }))
+    expect(codes(o)).not.toContain('manifest-changed')
+  })
+
   it('leaves out a rename when both of its paths are ignored', async () => {
     const o = await app(mv('src/legacy/a.ts', 'src/legacy/b.ts'), (repo) => {
       config(repo, { ignore: ['src/legacy/**'] })
@@ -122,6 +132,8 @@ describe('an import written with the extension of the emitted file', () => {
     ['deleted', 'src/lib/a.ts', './a.js', remove('src/lib/a.ts')],
     ['deleted', 'src/lib/a.tsx', './a.js', remove('src/lib/a.tsx')],
     ['deleted', 'src/lib/a.mts', './a.mjs', remove('src/lib/a.mts')],
+    ['deleted', 'src/lib/a.ts', './a.jsx', remove('src/lib/a.ts')],
+    ['deleted', 'src/lib/a.js', './a.jsx', remove('src/lib/a.js')],
   ])('breaks when its target is %s (%s as %s)', async (_how, target, specifier, change) => {
     const o = await app(change, (repo) => {
       repo.write(target, ORPHAN)

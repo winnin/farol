@@ -207,7 +207,7 @@ export async function runAnalyze(ctx: Context, options: AnalyzeOptions, deps: An
     const ignoredOf = createIgnoreOf(ctx, options.ignore ?? [])
     const allFiles = await diffFiles(ctx.repoRoot, mb, meta.head.sha)
     // A rename stays in the classification when one of its paths is not ignored: code that leaves for an ignored
-    // path is still gone. Signals (coverage, lint, tests) only read files whose path is not ignored.
+    // path is still gone. Its new path gets no role, dependencies or signals.
     const files = allFiles.filter((f) => !ignoredOf(f.path) || (f.oldPath !== undefined && !ignoredOf(f.oldPath)))
     const signalFiles = files.filter((f) => !ignoredOf(f.path))
     meta.ignoredFiles = allFiles.filter((f) => !signalFiles.includes(f)).map((f) => f.path)
@@ -230,7 +230,7 @@ export async function runAnalyze(ctx: Context, options: AnalyzeOptions, deps: An
       Object.assign(timings, wsTimings)
       t = deps.clock()
       roleOf = createAnalysisRoleOf(ctx, langWs.graph.nodes)
-      const { manifests, otherManifests } = await projectAndOtherManifests(ctx, files, roleOf, mb, meta.head.sha)
+      const { manifests, otherManifests } = await projectAndOtherManifests(ctx, signalFiles, roleOf, mb, meta.head.sha)
       const headContents = await readFiles(ctx.repoRoot, meta.head.sha, files.filter((f) => f.status !== 'deleted').map((f) => f.path))
       const headFiles = new Set(await listFiles(ctx.repoRoot, meta.head.sha))
       readHead = (path) => headContents.get(path)
@@ -240,7 +240,7 @@ export async function runAnalyze(ctx: Context, options: AnalyzeOptions, deps: An
       const helperContracts = helperContractChanges(langWs.base, langWs.head)
       contracts = contractsSection(helperContracts.changes, helperContracts.readable)
       lap('base')
-      result = classify({ files, roleOf, isGenerated: () => false, manifests, otherManifests, backend: { impacts: langWs.impacts }, graph: langWs.graph, routesFile: '', headRoutes: langWs.headRoutes, baseRoutes: langWs.baseRoutes, baseText: new Map(), headText: new Map() })
+      result = classify({ files, roleOf, isIgnored: ignoredOf, isGenerated: () => false, manifests, otherManifests, backend: { impacts: langWs.impacts }, graph: langWs.graph, routesFile: '', headRoutes: langWs.headRoutes, baseRoutes: langWs.baseRoutes, baseText: new Map(), headText: new Map() })
     } else {
       const ws = await loadWorkspace(ctx, meta.head.sha, wsTimings, deps.clock)
       headRoutes = ws.routes
@@ -262,7 +262,7 @@ export async function runAnalyze(ctx: Context, options: AnalyzeOptions, deps: An
         const routesBase = changedRoutesBase(files, ws)
         baseRoutes = routesBase === undefined ? null : await baseRouteTable(ctx, ws, mb, routesBase)
       }
-      const { manifests, otherManifests } = await projectAndOtherManifests(ctx, files, roleOf, mb, meta.head.sha)
+      const { manifests, otherManifests } = await projectAndOtherManifests(ctx, signalFiles, roleOf, mb, meta.head.sha)
       const entryFiles = new Set(ws.backend?.configEntries.values())
       const isCode = (path: string): boolean => roleOf(path) === 'source' || entryFiles.has(path)
       const tsModified = files.filter((f) => f.status === 'modified' && isCode(f.path) && TS_FILE.test(f.path)).map((f) => f.path)
@@ -281,7 +281,7 @@ export async function runAnalyze(ctx: Context, options: AnalyzeOptions, deps: An
       const existing = new Set((baseRoutes ?? ws.routes).routes.map((r) => r.key))
       const declImpactMap = declImpacts(baseOut, head, declChanged, () => true, { existing, erasedTypes: true })
       lap('base')
-      result = classify({ files, roleOf, isGenerated: createGeneratedMatcher(ctx.config.generated, ctx.projectPrefix, ctx.config.generated.length === 0 ? [] : await listFiles(ctx.repoRoot, meta.head.sha)), manifests, otherManifests, typeOnlyFiles, declImpacts: declImpactMap, ...(backend && ws.backend ? { backend: { impacts: backend.impacts, configEntries: ws.backend.configEntries } } : {}), graph: ws.graph, routesFile: ws.routesFile, ...(ws.routesFromDirectory ? { routesFromDirectory: true } : {}), headRoutes: ws.routes, baseRoutes, baseText, headText })
+      result = classify({ files, roleOf, isIgnored: ignoredOf, isGenerated: createGeneratedMatcher(ctx.config.generated, ctx.projectPrefix, ctx.config.generated.length === 0 ? [] : await listFiles(ctx.repoRoot, meta.head.sha)), manifests, otherManifests, typeOnlyFiles, declImpacts: declImpactMap, ...(backend && ws.backend ? { backend: { impacts: backend.impacts, configEntries: ws.backend.configEntries } } : {}), graph: ws.graph, routesFile: ws.routesFile, ...(ws.routesFromDirectory ? { routesFromDirectory: true } : {}), headRoutes: ws.routes, baseRoutes, baseText, headText })
     }
     // Added files that only declare things weigh almost nothing in the merge score.
     for (const f of result.files) if (f.status === 'added' && (f.role === 'source' || f.role === 'barrel') && isScriptFile(f.path) && isDeclarationsOnlyModule(f.path, readHead(f.path) ?? 'x(')) f.declarationsOnly = true

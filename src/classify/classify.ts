@@ -19,6 +19,8 @@ export interface ClassifyInput {
   files: readonly ChangedFile[]
   /** Role of a repo-relative path; `outside` for files outside the project directory. */
   roleOf: (repoPath: string) => AnalysisRole | 'outside'
+  /** Whether a changed path matches `ignore`: such a file is here only as a rename from a path that is not ignored. */
+  isIgnored?: (repoPath: string) => boolean
   /** Whether an import target (repo-relative, as written) is generated code that git ignores (`generated` globs). */
   isGenerated: (repoPath: string) => boolean
   /** Modified files that only declare types in base and head (erased at compile time). */
@@ -170,14 +172,15 @@ export function classify(input: ClassifyInput): ClassifyResult {
   const newFiles: string[] = []
 
   for (const file of input.files) {
-    let role = input.roleOf(file.path)
+    const ignored = input.isIgnored?.(file.path) === true
+    let role = ignored ? 'excluded' : input.roleOf(file.path)
     if (role === 'outside') {
       if (file.status !== 'deleted' && nodes.has(file.path)) role = 'source'
       else {
         role = 'excluded'
         reasons.push(reason('outside-project', 'outside the project directory and not imported by the project', file.path))
       }
-    } else if (role === 'excluded') {
+    } else if (role === 'excluded' && !ignored) {
       reasons.push(reason('file-excluded', 'matches "exclude" in the configuration', file.path))
     }
     const out: OutputFile = { path: file.path, status: file.status, role, linesAdded: file.added.length, linesRemoved: file.removed.length }

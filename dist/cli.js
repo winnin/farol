@@ -237884,8 +237884,8 @@ function withoutExtension(path3) {
 }
 var SOURCES_OF_EMITTED = {
   "": [".d.ts"],
-  ".js": [".ts", ".tsx", ".jsx", ".d.ts"],
-  ".jsx": [".tsx", ".d.ts"],
+  ".js": [".ts", ".tsx", ".d.ts", ".jsx"],
+  ".jsx": [".ts", ".tsx", ".d.ts", ".js"],
   ".mjs": [".mts", ".d.mts"],
   ".cjs": [".cts", ".d.cts"]
 };
@@ -237998,14 +237998,15 @@ function classify(input2) {
   const reachTargets = [];
   const newFiles = [];
   for (const file2 of input2.files) {
-    let role = input2.roleOf(file2.path);
+    const ignored = input2.isIgnored?.(file2.path) === true;
+    let role = ignored ? "excluded" : input2.roleOf(file2.path);
     if (role === "outside") {
       if (file2.status !== "deleted" && nodes.has(file2.path)) role = "source";
       else {
         role = "excluded";
         reasons.push(reason("outside-project", "outside the project directory and not imported by the project", file2.path));
       }
-    } else if (role === "excluded") {
+    } else if (role === "excluded" && !ignored) {
       reasons.push(reason("file-excluded", 'matches "exclude" in the configuration', file2.path));
     }
     const out = { path: file2.path, status: file2.status, role, linesAdded: file2.added.length, linesRemoved: file2.removed.length };
@@ -252549,7 +252550,7 @@ async function runAnalyze(ctx, options, deps) {
       Object.assign(timings, wsTimings);
       t = deps.clock();
       roleOf = createAnalysisRoleOf(ctx, langWs.graph.nodes);
-      const { manifests, otherManifests } = await projectAndOtherManifests(ctx, files, roleOf, mb, meta3.head.sha);
+      const { manifests, otherManifests } = await projectAndOtherManifests(ctx, signalFiles, roleOf, mb, meta3.head.sha);
       const headContents = await readFiles(ctx.repoRoot, meta3.head.sha, files.filter((f) => f.status !== "deleted").map((f) => f.path));
       const headFiles = new Set(await listFiles(ctx.repoRoot, meta3.head.sha));
       readHead = (path3) => headContents.get(path3);
@@ -252559,7 +252560,7 @@ async function runAnalyze(ctx, options, deps) {
       const helperContracts = helperContractChanges(langWs.base, langWs.head);
       contracts = contractsSection(helperContracts.changes, helperContracts.readable);
       lap("base");
-      result = classify({ files, roleOf, isGenerated: () => false, manifests, otherManifests, backend: { impacts: langWs.impacts }, graph: langWs.graph, routesFile: "", headRoutes: langWs.headRoutes, baseRoutes: langWs.baseRoutes, baseText: /* @__PURE__ */ new Map(), headText: /* @__PURE__ */ new Map() });
+      result = classify({ files, roleOf, isIgnored: ignoredOf, isGenerated: () => false, manifests, otherManifests, backend: { impacts: langWs.impacts }, graph: langWs.graph, routesFile: "", headRoutes: langWs.headRoutes, baseRoutes: langWs.baseRoutes, baseText: /* @__PURE__ */ new Map(), headText: /* @__PURE__ */ new Map() });
     } else {
       const ws = await loadWorkspace(ctx, meta3.head.sha, wsTimings, deps.clock);
       headRoutes = ws.routes;
@@ -252581,7 +252582,7 @@ async function runAnalyze(ctx, options, deps) {
         const routesBase = changedRoutesBase(files, ws);
         baseRoutes = routesBase === void 0 ? null : await baseRouteTable(ctx, ws, mb, routesBase);
       }
-      const { manifests, otherManifests } = await projectAndOtherManifests(ctx, files, roleOf, mb, meta3.head.sha);
+      const { manifests, otherManifests } = await projectAndOtherManifests(ctx, signalFiles, roleOf, mb, meta3.head.sha);
       const entryFiles = new Set(ws.backend?.configEntries.values());
       const isCode2 = (path3) => roleOf(path3) === "source" || entryFiles.has(path3);
       const tsModified = files.filter((f) => f.status === "modified" && isCode2(f.path) && TS_FILE.test(f.path)).map((f) => f.path);
@@ -252598,7 +252599,7 @@ async function runAnalyze(ctx, options, deps) {
       const existing = new Set((baseRoutes ?? ws.routes).routes.map((r) => r.key));
       const declImpactMap = declImpacts(baseOut, head, declChanged, () => true, { existing, erasedTypes: true });
       lap("base");
-      result = classify({ files, roleOf, isGenerated: createGeneratedMatcher(ctx.config.generated, ctx.projectPrefix, ctx.config.generated.length === 0 ? [] : await listFiles(ctx.repoRoot, meta3.head.sha)), manifests, otherManifests, typeOnlyFiles, declImpacts: declImpactMap, ...backend && ws.backend ? { backend: { impacts: backend.impacts, configEntries: ws.backend.configEntries } } : {}, graph: ws.graph, routesFile: ws.routesFile, ...ws.routesFromDirectory ? { routesFromDirectory: true } : {}, headRoutes: ws.routes, baseRoutes, baseText, headText });
+      result = classify({ files, roleOf, isIgnored: ignoredOf, isGenerated: createGeneratedMatcher(ctx.config.generated, ctx.projectPrefix, ctx.config.generated.length === 0 ? [] : await listFiles(ctx.repoRoot, meta3.head.sha)), manifests, otherManifests, typeOnlyFiles, declImpacts: declImpactMap, ...backend && ws.backend ? { backend: { impacts: backend.impacts, configEntries: ws.backend.configEntries } } : {}, graph: ws.graph, routesFile: ws.routesFile, ...ws.routesFromDirectory ? { routesFromDirectory: true } : {}, headRoutes: ws.routes, baseRoutes, baseText, headText });
     }
     for (const f of result.files) if (f.status === "added" && (f.role === "source" || f.role === "barrel") && isScriptFile(f.path) && isDeclarationsOnlyModule(f.path, readHead(f.path) ?? "x(")) f.declarationsOnly = true;
     lap("classify");
