@@ -76,3 +76,34 @@ describe('TanStack Router (file-based)', () => {
     expect(layout.output.routes.affected.map((r) => r.path)).toEqual(['/settings'])
   })
 })
+
+const EXPO_BASE = {
+  'farol.config.json': JSON.stringify({ routes: { adapter: 'expo-router' } }),
+  'components/Card.tsx': 'export function Card() {\n  return <div>card</div>\n}\n',
+  'app/_layout.tsx': 'export default function Root() {\n  return null\n}\n',
+  'app/index.tsx': 'export default function Home() {\n  return <h1>home</h1>\n}\n',
+  'app/(tabs)/_layout.tsx': 'export default function Tabs() {\n  return null\n}\n',
+  'app/(tabs)/cards.tsx': "import { Card } from '../../components/Card'\nexport default function Cards() {\n  return <Card />\n}\n",
+}
+
+describe('Expo Router', () => {
+  it('a new screen is isolated; a changed group layout affects the screens under it only', async () => {
+    const added = await analyzeRepo(repoWith(EXPO_BASE, { 'app/(tabs)/cards/[cardId].tsx': 'export default function CardDetail() {\n  return <h1>card</h1>\n}\n' }))
+    expect(added.output.classification).toBe('isolated')
+    expect(added.output.routes.added.map((r) => [r.path, r.entry])).toEqual([['/cards/:cardId', 'app/(tabs)/cards/[cardId].tsx']])
+    const layout = await analyzeRepo(repoWith(EXPO_BASE, { 'app/(tabs)/_layout.tsx': 'export default function Tabs() {\n  return <main />\n}\n' }))
+    expect(layout.output.classification).toBe('touches-existing')
+    expect(layout.output.routes.affected.map((r) => r.path)).toEqual(['/cards'])
+  })
+
+  it('a changed component affects the screens that render it', async () => {
+    const { output } = await analyzeRepo(repoWith(EXPO_BASE, { 'components/Card.tsx': 'export function Card() {\n  return <div>new card</div>\n}\n' }))
+    expect(output.classification).toBe('touches-existing')
+    expect(output.routes.affected.map((r) => r.path)).toEqual(['/cards'])
+  })
+
+  it('a test file added under app/ is a new screen: Expo Router loads every module there', async () => {
+    const { output } = await analyzeRepo(repoWith(EXPO_BASE, { 'app/(tabs)/Card.test.tsx': "import { Card } from '../../components/Card'\n\ntest('renders', () => Card())\n" }))
+    expect(output.routes.added.map((r) => [r.path, r.entry])).toEqual([['/Card.test', 'app/(tabs)/Card.test.tsx']])
+  })
+})

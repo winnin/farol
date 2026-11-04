@@ -23,7 +23,7 @@ export interface Workspace {
   routes: RouteTable
   /** Repo-relative routes file, or the routes directory when `routesFromDirectory`. */
   routesFile: string
-  /** File-system router (Next.js, TanStack Router): every route module under `routesFile` is a route of its own. */
+  /** File-system router (Next.js, TanStack Router, Expo Router): every route module under `routesFile` is a route of its own. */
   routesFromDirectory?: boolean
   /** Repo-relative paths of every file in the tree (git ref) — undefined for the working tree. */
   treeFiles?: string[]
@@ -129,7 +129,7 @@ export function extractRoutes(ctx: Context, resolver: ResolverContext, routesFil
   })
 }
 
-/** Whether the configured router reads a directory (Next.js, TanStack Router) rather than one routes file. */
+/** Whether the configured router reads a directory (Next.js, TanStack Router, Expo Router) rather than one routes file. */
 export function routesFromDirectory(ctx: Context): boolean {
   return getRouteAdapter(ctx.config.routes.adapter).source === 'directory'
 }

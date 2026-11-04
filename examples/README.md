@@ -8,12 +8,12 @@ parameter.
 |---|---|
 | [`farol.config.json`](farol.config.json) | A full configuration for a React Router frontend: routes, roles, signals. |
 | [`.farol.json`](.farol.json) | Default values for every CLI parameter, so `farol analyze && farol html` needs no flags. |
-| [`workflow.yml`](workflow.yml) | GitHub Actions for TypeScript projects (React Router, Next.js, TanStack Router, GraphQL/REST APIs). |
+| [`workflow.yml`](workflow.yml) | GitHub Actions for TypeScript projects (React Router, Next.js, TanStack Router, Expo Router, GraphQL/REST APIs). |
 | [`workflow-go.yml`](workflow-go.yml) | GitHub Actions for Go services. |
 | [`workflow-python.yml`](workflow-python.yml) | GitHub Actions for Python services. |
 
 - [How a setup works](#how-a-setup-works)
-- Stacks: [React Router](#react-router) · [Next.js](#nextjs) · [TanStack Router](#tanstack-router) · [TypeScript API (GraphQL, REST)](#typescript-api-graphql-rest) · [Go](#go) · [Python](#python) · [Monorepos](#monorepos)
+- Stacks: [React Router](#react-router) · [Next.js](#nextjs) · [TanStack Router](#tanstack-router) · [Expo Router](#expo-router) · [TypeScript API (GraphQL, REST)](#typescript-api-graphql-rest) · [Go](#go) · [Python](#python) · [Monorepos](#monorepos)
 - [GitHub Actions](#github-actions)
 - [Datadog traffic and errors](#datadog-traffic-and-errors)
 - [Every configuration key](#every-configuration-key)
@@ -132,6 +132,28 @@ directory.
   a change there affects those routes, and they are not listed as pages themselves.
 - Files and folders starting with `-` are ignored, as the router does.
 - Code-based route trees (`createRoute` with `getParentRoute`) are not read.
+
+**Reports and CI:** as for [React Router](#react-router), with [`workflow.yml`](workflow.yml).
+
+## Expo Router
+
+File-based routing for Expo and React Native apps, read from the file names (no routes file).
+
+```json
+{
+  "routes": { "adapter": "expo-router" },
+  "roles": { "global": ["app.json", "app.config.*", "package.json"] }
+}
+```
+
+- **`routes.dir`**: the routes directory. By default `src/app/` in the project when it exists, else `app/`, as Expo CLI
+  picks them.
+- Every module is a screen, tests included (Expo Router loads them all); `index` is its folder's path; `[id]` reads as `:id`, `[...rest]` as `*`. Groups `(tabs)`
+  and `(a,b)` are left out of the URL.
+- The `_layout` of every folder above a screen is its layout: a change there affects every screen under it.
+- `name+api.ts` modules are API routes; `+not-found` is a screen. `+native-intent` and `+html` at the root are layouts
+  of every screen, `+middleware` of every screen and API route.
+- Platform modules (`about.ios.tsx`, `about.web.tsx`) belong to the route of `about.tsx`.
 
 **Reports and CI:** as for [React Router](#react-router), with [`workflow.yml`](workflow.yml).
 
@@ -310,9 +332,9 @@ project unless noted.
 | `language` | `typescript` | `typescript`, `go` or `python`. |
 | `surface` | `frontend` | `frontend` (pages) or `backend` (operations, endpoints). Go and Python must be `backend`. |
 | `tsconfig` | `tsconfig.json` | TypeScript: the project's tsconfig. Solution-style configs are followed to the reference that includes the routes. |
-| `routes.adapter` | `react-router` | Frontends: `react-router`, `next` or `tanstack-router`. |
+| `routes.adapter` | `react-router` | Frontends: `react-router`, `next`, `tanstack-router` or `expo-router`. |
 | `routes.file` | — | `react-router` (required): the file that builds the route table. Rejected for the other adapters. |
-| `routes.dir` | `next`: the project or its `src/`; `tanstack-router`: `src/routes` | File-system routers: where the routes live. |
+| `routes.dir` | `next`: the project or its `src/`; `tanstack-router`: `src/routes`; `expo-router`: `app/` or `src/app/` | File-system routers: where the routes live. |
 | `routes.extraFiles` | `[]` | `react-router`: modules that only define routes; they get the routes rule. |
 | `backend.graphql` | `true` | TypeScript backends: read GraphQL schemas and resolvers. |
 | `backend.rest` | `true` | TypeScript backends: read REST registrations. |

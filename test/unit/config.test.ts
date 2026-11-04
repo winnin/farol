@@ -37,6 +37,7 @@ describe('parseConfig', () => {
     expect(parseConfig('{"routes":{"adapter":"next"}}', 'c').routes).toEqual({ adapter: 'next', file: '', dir: '', extraFiles: [] })
     expect(parseConfig('{"routes":{"adapter":"tanstack-router"}}', 'c').routes).toEqual({ adapter: 'tanstack-router', file: '', dir: 'src/routes', extraFiles: [] })
     expect(parseConfig('{"routes":{"adapter":"tanstack-router","dir":"routes"}}', 'c').routes.dir).toBe('routes')
+    expect(parseConfig('{"routes":{"adapter":"expo-router"}}', 'c').routes).toEqual({ adapter: 'expo-router', file: '', dir: '', extraFiles: [] })
   })
 
   it('explains what is wrong and where', () => {

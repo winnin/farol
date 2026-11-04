@@ -6,7 +6,7 @@ finds what a change reaches, and how the score and the verdict are computed. For
 
 - [Pipeline](#pipeline)
 - [TypeScript frontends (React Router)](#typescript-frontends-react-router)
-- [File-system routers (Next.js, TanStack Router)](#file-system-routers-nextjs-tanstack-router)
+- [File-system routers (Next.js, TanStack Router, Expo Router)](#file-system-routers-nextjs-tanstack-router-expo-router)
 - [TypeScript and JavaScript backends (GraphQL, REST)](#typescript-and-javascript-backends-graphql-rest)
 - [Go](#go)
 - [Python](#python)
@@ -80,9 +80,9 @@ and group layouts apart.
 - An i18n JSON file is additive when it only adds keys.
 - A file that only declares types, in both versions, is `type-only-change`.
 
-## File-system routers (Next.js, TanStack Router)
+## File-system routers (Next.js, TanStack Router, Expo Router)
 
-With `routes.adapter` set to `next` or `tanstack-router`, there is no routes file: the routes are the modules of a
+With `routes.adapter` set to `next`, `tanstack-router` or `expo-router`, there is no routes file: the routes are the modules of a
 directory, read from the git tree of each commit. Everything after the route table (declaration-level reach, the
 additive rules, the score) is the same as for React Router.
 
@@ -101,6 +101,20 @@ additive rules, the score) is the same as for React Router.
 - A route that other routes render inside (`/posts` for `/posts/$id`, the pathless `/_app` for `/_app/settings`, `/posts` for the index `/posts/`) is their **layout**; the others are the **pages**. The root is the first layout of every route.
 - URL paths: pathless (`_app`) and group (`(group)`) segments are dropped, `$id` reads as `:id`, `{-$id}` as `:id`, `$` as `*`, a trailing `_` (un-nested route) is removed.
 - Files and folders starting with `-` are ignored, as the router does.
+
+**Expo Router** (`routes.dir`: the routes directory; by default `src/app/` in the project when it exists, else `app/`,
+as Expo CLI picks them). A project (a directory holding `package.json`) is never the routes directory, even with a stray
+`_layout` at its root. Another configured directory is the routes directory when it is named `app` or holds a root
+`_layout` (a custom `root`); otherwise farol looks for `src/app/`, then `app/`, in it. Without one, the table is a
+*dynamic route* (the PR is `unknown`).
+
+- Every module (`.tsx`, `.ts`, `.jsx`, `.js`) is a screen, tests and stories included: Expo Router loads every module of its directory, so `Card.test.tsx` there is the screen `/Card.test`. `index` is its folder's path. `[id]` reads as `:id`, `[...rest]` as `*`. Route groups `(group)` and `(a,b)` are left out of the URL; the key keeps the folder path (Expo Router's own route name), so two groups with the same URL stay apart.
+- The `_layout` of every folder above a screen, root included, is one of its layouts (Expo Router reads the name before the first dot, so `_layout.test.tsx` is a layout too).
+- `name+api` modules are API routes at `name`; they get no screen layouts.
+- `+not-found` is a screen for every unmatched URL below its folder (path `…/*`).
+- At the root, `+middleware` (server middleware) runs before every screen and API route; `+native-intent` (rewrites every incoming deep link) and `+html` (the web document) are layouts of every screen.
+- Platform modules (`about.ios.tsx`, `.android`, `.native`, `.web`) are modules of the route of `about.tsx`, which is its entry; `_layout.web.tsx` is a layout next to `_layout.tsx`.
+- What Expo Router refuses is a *dynamic route*: another `+` name, a `+html`/`+native-intent`/`+middleware` below the root or with a platform extension, an API route with a platform extension, two modules of one route, layout or root module on the same platform (`index.ts` and `index.tsx`, `_layout.ts` and `_layout.tsx`), and a platform module (screen or layout) without the universal module next to it.
 
 **Route changes.** Any file added, removed or changed under the routes directory makes farol read the base table too.
 A new route is additive (`route-added`), a removed route or a route whose layouts changed is `routes-not-additive`,
