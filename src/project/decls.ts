@@ -105,6 +105,14 @@ export function fileHeader(sf: ts.SourceFile): string[] {
       }
     } else if (ts.isImportEqualsDeclaration(s)) {
       if (!s.isTypeOnly) out.push(`bind ${s.name.text} ${tokenHash(sf, s.moduleReference)}`)
+    } else if (ts.isExportDeclaration(s) && s.moduleSpecifier !== undefined && ts.isStringLiteral(s.moduleSpecifier)) {
+      // Re-exports: type-only ones are erased (`export type { A } from`, `export { type A } from`).
+      const from = s.moduleSpecifier.text
+      const clause = s.exportClause
+      if (s.isTypeOnly) continue
+      if (clause === undefined) out.push(`effect export * from ${from}`)
+      else if (ts.isNamespaceExport(clause)) out.push(`effect export * as ${clause.name.text} from ${from}`)
+      else for (const e of clause.elements) if (!e.isTypeOnly) out.push(`effect export ${(e.propertyName ?? e.name).text} as ${e.name.text} from ${from}`)
     } else if (isImportLike(s)) out.push(`effect ${tokenHash(sf, s)}`)
     for (const c of codeComments(s, sf)) out.push(`effect comment ${tokenHash(sf, s)} ${c}`)
   }

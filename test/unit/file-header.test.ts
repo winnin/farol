@@ -19,6 +19,10 @@ describe('file header: what declarations leave out', () => {
     expect(changed("import type { A } from './a'", "import type { A } from './b'")).toBe(false)
     expect(changed('const x = 1', "import './polyfill'\nconst x = 1")).toBe(true)
     expect(changed("export { a } from './a'", "export { a } from './b'")).toBe(true)
+    expect(changed("export type { A } from './a'\nconst x = 1", "export type { A } from './b'\nconst x = 1")).toBe(false)
+    expect(changed("export { type A, b } from './a'", "export { type A, b } from './b'")).toBe(true)
+    expect(changed("export { type A, b } from './a'", "export { type C, b } from './a'")).toBe(false)
+    expect(changed("export * from './a'", "export * from './b'")).toBe(true)
   })
 
   it('counts triple-slash directives and code comments, each in its statement', () => {
