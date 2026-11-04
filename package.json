@@ -32,7 +32,8 @@
     "dist",
     "go-helper",
     "py-helper",
-    "!**/__pycache__"
+    "!**/__pycache__",
+    "!go-helper/gohelper"
   ],
   "engines": {
     "node": ">=22"

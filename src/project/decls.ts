@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto'
 import { posix } from 'node:path'
 import ts from 'typescript'
 import type { DeclHelperOutput } from '../decls/types.js'
+import { codeComments } from '../classify/additive.js'
+import { compareStrings } from '../output/order.js'
 import { routeAnchors } from '../classify/reach.js'
 import type { RouteTable } from '../routes/types.js'
 import { parseIsolated } from './parse.js'
@@ -33,7 +35,7 @@ export function moduleDecls(sf: ts.SourceFile): { name: string; kind: string; no
   const out: { name: string; kind: string; node: ts.Node; owner?: string }[] = []
   const code: ts.Statement[] = []
   for (const s of sf.statements) {
-    if (ts.isImportDeclaration(s) || ts.isImportEqualsDeclaration(s) || (ts.isExportDeclaration(s) && s.moduleSpecifier !== undefined)) continue
+    if (isImportLike(s)) continue
     if (ts.isFunctionDeclaration(s)) out.push({ name: s.name?.text ?? 'default', kind: 'func', node: s })
     else if (ts.isClassDeclaration(s)) {
       const cls = s.name?.text ?? 'default'
@@ -80,6 +82,40 @@ function toDecl(sf: ts.SourceFile, file: string, d: { name: string; kind: string
   return { id: `${file}#${d.name}`, file, line: start, end, kind: d.kind, hash, core: hash }
 }
 
+const isImportLike = (s: ts.Statement): boolean => ts.isImportDeclaration(s) || ts.isImportEqualsDeclaration(s) || (ts.isExportDeclaration(s) && s.moduleSpecifier !== undefined)
+
+/**
+ * What declaration hashes leave out, as entries compared one by one (src/decls/impact.ts): the name each import binds
+ * ("bind <name> <module> <imported>"; type-only imports are erased), side-effect imports and re-exports, and the comments
+ * that change emitted or bundled code (triple-slash directives, pragmas, pure annotations, bundler hints), each with the
+ * statement it sits in.
+ */
+export function fileHeader(sf: ts.SourceFile): string[] {
+  const out: string[] = []
+  for (const s of sf.statements) {
+    if (ts.isImportDeclaration(s) && ts.isStringLiteral(s.moduleSpecifier)) {
+      const from = s.moduleSpecifier.text
+      const clause = s.importClause
+      if (clause === undefined) out.push(`effect import ${from}`)
+      else if (clause.phaseModifier !== ts.SyntaxKind.TypeKeyword) {
+        if (clause.name) out.push(`bind ${clause.name.text} ${from} default`)
+        const bindings = clause.namedBindings
+        if (bindings && ts.isNamespaceImport(bindings)) out.push(`bind ${bindings.name.text} ${from} *`)
+        else for (const e of bindings?.elements ?? []) if (!e.isTypeOnly) out.push(`bind ${e.name.text} ${from} ${(e.propertyName ?? e.name).text}`)
+      }
+    } else if (ts.isImportEqualsDeclaration(s)) {
+      if (!s.isTypeOnly) out.push(`bind ${s.name.text} ${tokenHash(sf, s.moduleReference)}`)
+    } else if (isImportLike(s)) out.push(`effect ${tokenHash(sf, s)}`)
+    for (const c of codeComments(s, sf)) out.push(`effect comment ${tokenHash(sf, s)} ${c}`)
+  }
+  return out.sort(compareStrings)
+}
+
+/** The file header of a base file, from its text alone. */
+export function baseHeader(file: string, code: string): string[] {
+  return fileHeader(parseIsolated(file, code).sourceFile)
+}
+
 /** Declarations of a base file, from its text alone (no type checking): enough to compare hashes. */
 export function baseDecls(file: string, code: string): Decl[] {
   const { sourceFile: sf } = parseIsolated(file, code)
@@ -108,10 +144,12 @@ export function tsDeclGraph(input: TsDeclInput): DeclHelperOutput {
   const nodes: { node: ts.Node; sf: ts.SourceFile; kind: string; owner?: number }[] = []
   const byNode = new Map<ts.Node, number>()
   const files: string[] = []
+  const headers: Record<string, string[]> = {}
   for (const sf of input.project.program.getSourceFiles()) {
     if (sf.isDeclarationFile || !isProject(sf.fileName)) continue
     const file = rel(sf.fileName)
     files.push(file)
+    headers[file] = fileHeader(sf)
     const classIndex = new Map<string, number>()
     for (const d of moduleDecls(sf)) {
       byNode.set(d.node, decls.length)
@@ -191,5 +229,6 @@ export function tsDeclGraph(input: TsDeclInput): DeclHelperOutput {
     entries,
     problems: [],
     comments: [],
+    headers,
   }
 }

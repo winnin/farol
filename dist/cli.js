@@ -236685,7 +236685,8 @@ var package_default = {
     "dist",
     "go-helper",
     "py-helper",
-    "!**/__pycache__"
+    "!**/__pycache__",
+    "!go-helper/gohelper"
   ],
   engines: {
     node: ">=22"
@@ -237359,9 +237360,9 @@ function isTypeOnlyModule(file2, code2) {
   });
 }
 var SCRIPT_FILE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
-var CODE_COMMENT = /@jsx|[#@]__(?:PURE|NO_SIDE_EFFECTS)__|webpack[A-Z]|@vite-ignore/;
+var CODE_COMMENT = /^\/\/\/\s*<|@jsx|[#@]__(?:PURE|NO_SIDE_EFFECTS)__|webpack[A-Z]|@vite-ignore/;
 var PRINTER = import_typescript3.default.createPrinter({ removeComments: true });
-function codeComments(sf) {
+function codeComments(root, sf) {
   const out = [];
   let index = 0;
   const visit3 = (node2) => {
@@ -237379,7 +237380,7 @@ function codeComments(sf) {
     }
     index++;
   };
-  visit3(sf);
+  visit3(root);
   return out;
 }
 function isCommentsOnlyChange(file2, base, head) {
@@ -237391,7 +237392,7 @@ function isCommentsOnlyChange(file2, base, head) {
   const before = parse4(base);
   const after = parse4(head);
   if (before === null || after === null || PRINTER.printFile(before) !== PRINTER.printFile(after)) return false;
-  return isDeepStrictEqual(codeComments(before), codeComments(after));
+  return isDeepStrictEqual(codeComments(before, before), codeComments(after, after));
 }
 
 // src/classify/reach.ts
@@ -237551,6 +237552,190 @@ function computeRisk(input2) {
   });
   files.sort((a, b) => RANK2[a.level] - RANK2[b.level] || b.pagesReached - a.pagesReached || b.transitiveDependents - a.transitiveDependents || compareStrings(a.path, b.path));
   return { totalPages: pages.length, files };
+}
+
+// src/decls/impact.ts
+var DeclGraph = class {
+  constructor(out) {
+    this.out = out;
+    out.decls.forEach((d, i) => this.byId.set(d.id, i));
+    for (const [from, to] of out.edges) {
+      const list2 = this.reverse.get(to) ?? [];
+      list2.push(from);
+      this.reverse.set(to, list2);
+    }
+  }
+  out;
+  byId = /* @__PURE__ */ new Map();
+  reverse = /* @__PURE__ */ new Map();
+  decl(i) {
+    const d = this.out.decls[i];
+    if (d === void 0) throw new Error(`internal: Go declaration ${i} does not exist`);
+    return d;
+  }
+  /** Breadth-first over reversed edges: every declaration whose code can run the starting ones, with the next step back. */
+  reach(starts) {
+    const result = new Map(starts.map((s) => [s, { dist: 0, next: null }]));
+    let frontier = [...starts];
+    while (frontier.length > 0) {
+      const next = [];
+      for (const node2 of frontier) {
+        const dist = (result.get(node2)?.dist ?? 0) + 1;
+        for (const from of this.reverse.get(node2) ?? []) {
+          if (result.has(from)) continue;
+          result.set(from, { dist, next: node2 });
+          next.push(from);
+        }
+      }
+      frontier = next;
+    }
+    return result;
+  }
+  /** Entry points whose anchors reach the starting declarations, each with the file chain anchor → … → start. */
+  entriesReaching(starts, keys) {
+    const reach = this.reach(starts);
+    const out = /* @__PURE__ */ new Map();
+    for (const entry of this.out.entries) {
+      if (keys && !keys.has(entry.key)) continue;
+      let best;
+      for (const a of entry.anchors) {
+        const r = reach.get(a);
+        if (r && (best === void 0 || r.dist < (reach.get(best)?.dist ?? Infinity))) best = a;
+      }
+      if (best === void 0) continue;
+      const files = [];
+      for (let cur = best; cur !== null; cur = reach.get(cur)?.next ?? null) {
+        const file2 = this.decl(cur).file;
+        if (files[files.length - 1] !== file2) files.push(file2);
+      }
+      out.set(entry.key, files);
+    }
+    return out;
+  }
+  anchorIds(entry) {
+    return entry.anchors.map((a) => this.decl(a).id).sort(compareStrings).join("\n");
+  }
+};
+function declImportGraph(out) {
+  const seen = /* @__PURE__ */ new Set();
+  const edges = [];
+  for (const [from, to] of out.edges) {
+    const a = out.decls[from]?.file;
+    const b = out.decls[to]?.file;
+    if (a === void 0 || b === void 0 || a === b || seen.has(`${a}\0${b}`)) continue;
+    seen.add(`${a}\0${b}`);
+    edges.push({ from: a, to: b, kind: "static" });
+  }
+  edges.sort((x, y) => compareStrings(x.from, y.from) || compareStrings(x.to, y.to));
+  const parseErrors = out.problems.filter((p) => p.kind !== "dynamic-route").map((p) => ({ file: p.file, line: Math.max(1, p.line), message: p.detail }));
+  return { nodes: [...out.files].sort(compareStrings), edges, unresolved: [], parseErrors, reexportOnly: [] };
+}
+function declRouteTable(out) {
+  const routes = out.entries.map((e) => ({
+    key: e.key,
+    path: e.key,
+    index: false,
+    entry: e.file === "" ? null : e.file,
+    modules: sortedUnique(e.anchors.map((a) => out.decls[a]?.file ?? "").filter((f) => f !== "")),
+    layouts: [],
+    ...e.computed !== void 0 && e.computed.length > 0 ? { computed: e.computed.map((c) => ({ file: c.file, line: Math.max(1, c.line), detail: `${e.key}: path computed at run time` })) } : {}
+  }));
+  const dynamic = out.problems.filter((p) => p.kind === "dynamic-route").map((p) => ({ file: p.file, line: Math.max(1, p.line), detail: p.detail }));
+  return { routes: routes.sort((a, b) => compareStrings(a.key, b.key)), dynamic, sources: sortedUnique(out.entries.map((e) => e.file)) };
+}
+var isStartup = (id) => id.includes(".init#") || id.includes("._#");
+var HEADER_CHANGED = "imports or code directives changed";
+function headerChanged(before, after) {
+  if (before === void 0 || after === void 0) return before !== after;
+  const bound = (entries) => new Set(entries.filter((e) => e.startsWith("bind ")).map((e) => e.split(" ")[1] ?? ""));
+  const [boundBefore, boundAfter] = [bound(before), bound(after)];
+  const [setBefore, setAfter] = [new Set(before), new Set(after)];
+  const counts = (e, other) => !e.startsWith("bind ") || other.has(e.split(" ")[1] ?? "");
+  return before.some((e) => !setAfter.has(e) && counts(e, boundAfter)) || after.some((e) => !setBefore.has(e) && counts(e, boundBefore));
+}
+function declImpacts(base, head, files, isSource2, options = {}) {
+  const b = new DeclGraph(base);
+  const h = new DeclGraph(head);
+  const short = (id) => head.module !== "" && id.startsWith(`${head.module}/`) ? id.slice(head.module.length + 1) : id;
+  const baseKeys = options.existing ?? new Set(base.entries.map((e) => e.key));
+  const headKeys = new Set(head.entries.map((e) => e.key));
+  const existing = new Set([...headKeys].filter((k) => baseKeys.has(k)));
+  const added = new Set([...headKeys].filter((k) => !baseKeys.has(k)));
+  const result = /* @__PURE__ */ new Map();
+  for (const file2 of files) {
+    if (!isSource2(file2.path)) continue;
+    const oldPath = file2.oldPath ?? file2.path;
+    const impact = { additive: true, problems: [], affected: /* @__PURE__ */ new Map(), addedOperations: [], added: [], chains: /* @__PURE__ */ new Map(), newEntriesReaching: [] };
+    const hit = (reached, cause) => {
+      for (const [key, chain] of reached) {
+        if (impact.affected.has(key)) continue;
+        impact.affected.set(key, cause);
+        impact.chains.set(key, chain);
+      }
+    };
+    const headHere = file2.status === "deleted" ? [] : head.decls.map((d, i) => [d, i]).filter(([d]) => d.file === file2.path);
+    const baseHere = file2.status === "added" ? [] : base.decls.map((d, i) => [d, i]).filter(([d]) => d.file === oldPath);
+    if (file2.status === "added") {
+      const starts = headHere.map(([, i]) => i);
+      hit(h.entriesReaching(starts, existing), file2.path);
+      impact.newEntriesReaching = [...h.entriesReaching(starts, added).keys()].sort(compareStrings);
+      impact.added = headHere.map(([d]) => short(d.id)).sort(compareStrings);
+    }
+    for (const [d, i] of file2.status === "added" ? [] : headHere) {
+      const before = b.byId.get(d.id);
+      if (before === void 0 && !isStartup(d.id)) {
+        impact.added.push(short(d.id));
+        continue;
+      }
+      if (before !== void 0 && b.decl(before).core === d.core) continue;
+      if (options.erasedTypes === true && d.kind === "type") {
+        impact.erased = [...impact.erased ?? [], short(d.id)];
+        continue;
+      }
+      impact.problems.push(`${d.kind} ${short(d.id)} ${before === void 0 ? "added (runs at startup)" : "changed"}`);
+      hit(h.entriesReaching([i], existing), short(d.id));
+    }
+    for (const [d, i] of baseHere) {
+      if (h.byId.has(d.id) || options.erasedTypes === true && d.kind === "type") continue;
+      impact.problems.push(`${d.kind} ${short(d.id)} was removed`);
+      hit(b.entriesReaching([i], existing), short(d.id));
+    }
+    if (file2.status !== "added" && file2.status !== "deleted" && headerChanged(base.headers?.[oldPath], head.headers?.[file2.path])) {
+      impact.problems.push(HEADER_CHANGED);
+      hit(h.entriesReaching(headHere.map(([, i]) => i), existing), file2.path);
+    }
+    for (const entry of head.entries) {
+      if (entry.file !== file2.path) continue;
+      if (added.has(entry.key)) {
+        impact.addedOperations.push(entry.key);
+        continue;
+      }
+      const before = options.existing ? void 0 : base.entries.find((e) => e.key === entry.key);
+      if (before && (b.anchorIds(before) !== h.anchorIds(entry) || before.inline !== entry.inline) && !impact.affected.has(entry.key)) {
+        impact.problems.push(`entry point ${entry.key} now runs different code (handler or middlewares)`);
+        impact.affected.set(entry.key, "registration");
+        impact.chains.set(entry.key, [file2.path]);
+      }
+    }
+    for (const entry of options.existing ? [] : base.entries) if (entry.file === oldPath && !headKeys.has(entry.key)) impact.problems.push(`entry point ${entry.key} was removed`);
+    result.set(file2.path, impact);
+  }
+  const reportedRemoved = new Set((options.existing ? [] : base.entries).filter((e) => !headKeys.has(e.key) && result.has(e.file)).map((e) => e.key));
+  const orphans = (options.existing ? [] : base.entries).filter((e) => !headKeys.has(e.key) && !reportedRemoved.has(e.key)).map((e) => e.key);
+  if (orphans.length > 0) {
+    const registrationChanged = [...result.keys()].filter((path3) => head.decls.some((d) => d.file === path3 && d.hash !== d.core && b.byId.has(d.id) && b.decl(b.byId.get(d.id) ?? -1).hash !== d.hash));
+    for (const path3 of registrationChanged.length > 0 ? registrationChanged : [...result.keys()]) {
+      const impact = result.get(path3);
+      for (const key of orphans) impact?.problems.push(`entry point ${key} was removed`);
+    }
+  }
+  for (const impact of result.values()) {
+    impact.additive = impact.problems.length === 0;
+    impact.added = sortedUnique(impact.added);
+    impact.addedOperations = sortedUnique(impact.addedOperations);
+    impact.affected = new Map([...impact.affected.entries()].sort(([x], [y]) => compareStrings(x, y)));
+  }
+  return result;
 }
 
 // src/classify/dependencies.ts
@@ -237831,7 +238016,8 @@ function classify(input2) {
     }
     const sourceImpact = role === "source" ? impactOf(file2.path) : void 0;
     const nothingDeclared = sourceImpact !== void 0 && sourceImpact.additive && sourceImpact.addedOperations.length === 0 && sourceImpact.added.length === 0 && (sourceImpact.erased?.length ?? 0) === 0;
-    const declImpact = nothingDeclared && isScriptFile(file2.path) ? void 0 : sourceImpact;
+    const headerChanged2 = sourceImpact?.problems.includes(HEADER_CHANGED) === true;
+    const declImpact = (nothingDeclared || headerChanged2) && isScriptFile(file2.path) ? void 0 : sourceImpact;
     if (declImpact) {
       out.additive = declImpact.additive;
       if (declImpact.additive) {
@@ -249094,177 +249280,6 @@ import { homedir, tmpdir } from "os";
 import { dirname as dirname2, join as join3 } from "path";
 import { fileURLToPath } from "url";
 
-// src/decls/impact.ts
-var DeclGraph = class {
-  constructor(out) {
-    this.out = out;
-    out.decls.forEach((d, i) => this.byId.set(d.id, i));
-    for (const [from, to] of out.edges) {
-      const list2 = this.reverse.get(to) ?? [];
-      list2.push(from);
-      this.reverse.set(to, list2);
-    }
-  }
-  out;
-  byId = /* @__PURE__ */ new Map();
-  reverse = /* @__PURE__ */ new Map();
-  decl(i) {
-    const d = this.out.decls[i];
-    if (d === void 0) throw new Error(`internal: Go declaration ${i} does not exist`);
-    return d;
-  }
-  /** Breadth-first over reversed edges: every declaration whose code can run the starting ones, with the next step back. */
-  reach(starts) {
-    const result = new Map(starts.map((s) => [s, { dist: 0, next: null }]));
-    let frontier = [...starts];
-    while (frontier.length > 0) {
-      const next = [];
-      for (const node2 of frontier) {
-        const dist = (result.get(node2)?.dist ?? 0) + 1;
-        for (const from of this.reverse.get(node2) ?? []) {
-          if (result.has(from)) continue;
-          result.set(from, { dist, next: node2 });
-          next.push(from);
-        }
-      }
-      frontier = next;
-    }
-    return result;
-  }
-  /** Entry points whose anchors reach the starting declarations, each with the file chain anchor → … → start. */
-  entriesReaching(starts, keys) {
-    const reach = this.reach(starts);
-    const out = /* @__PURE__ */ new Map();
-    for (const entry of this.out.entries) {
-      if (keys && !keys.has(entry.key)) continue;
-      let best;
-      for (const a of entry.anchors) {
-        const r = reach.get(a);
-        if (r && (best === void 0 || r.dist < (reach.get(best)?.dist ?? Infinity))) best = a;
-      }
-      if (best === void 0) continue;
-      const files = [];
-      for (let cur = best; cur !== null; cur = reach.get(cur)?.next ?? null) {
-        const file2 = this.decl(cur).file;
-        if (files[files.length - 1] !== file2) files.push(file2);
-      }
-      out.set(entry.key, files);
-    }
-    return out;
-  }
-  anchorIds(entry) {
-    return entry.anchors.map((a) => this.decl(a).id).sort(compareStrings).join("\n");
-  }
-};
-function declImportGraph(out) {
-  const seen = /* @__PURE__ */ new Set();
-  const edges = [];
-  for (const [from, to] of out.edges) {
-    const a = out.decls[from]?.file;
-    const b = out.decls[to]?.file;
-    if (a === void 0 || b === void 0 || a === b || seen.has(`${a}\0${b}`)) continue;
-    seen.add(`${a}\0${b}`);
-    edges.push({ from: a, to: b, kind: "static" });
-  }
-  edges.sort((x, y) => compareStrings(x.from, y.from) || compareStrings(x.to, y.to));
-  const parseErrors = out.problems.filter((p) => p.kind !== "dynamic-route").map((p) => ({ file: p.file, line: Math.max(1, p.line), message: p.detail }));
-  return { nodes: [...out.files].sort(compareStrings), edges, unresolved: [], parseErrors, reexportOnly: [] };
-}
-function declRouteTable(out) {
-  const routes = out.entries.map((e) => ({
-    key: e.key,
-    path: e.key,
-    index: false,
-    entry: e.file === "" ? null : e.file,
-    modules: sortedUnique(e.anchors.map((a) => out.decls[a]?.file ?? "").filter((f) => f !== "")),
-    layouts: [],
-    ...e.computed !== void 0 && e.computed.length > 0 ? { computed: e.computed.map((c) => ({ file: c.file, line: Math.max(1, c.line), detail: `${e.key}: path computed at run time` })) } : {}
-  }));
-  const dynamic = out.problems.filter((p) => p.kind === "dynamic-route").map((p) => ({ file: p.file, line: Math.max(1, p.line), detail: p.detail }));
-  return { routes: routes.sort((a, b) => compareStrings(a.key, b.key)), dynamic, sources: sortedUnique(out.entries.map((e) => e.file)) };
-}
-var isStartup = (id) => id.includes(".init#") || id.includes("._#");
-function declImpacts(base, head, files, isSource2, options = {}) {
-  const b = new DeclGraph(base);
-  const h = new DeclGraph(head);
-  const short = (id) => head.module !== "" && id.startsWith(`${head.module}/`) ? id.slice(head.module.length + 1) : id;
-  const baseKeys = options.existing ?? new Set(base.entries.map((e) => e.key));
-  const headKeys = new Set(head.entries.map((e) => e.key));
-  const existing = new Set([...headKeys].filter((k) => baseKeys.has(k)));
-  const added = new Set([...headKeys].filter((k) => !baseKeys.has(k)));
-  const result = /* @__PURE__ */ new Map();
-  for (const file2 of files) {
-    if (!isSource2(file2.path)) continue;
-    const oldPath = file2.oldPath ?? file2.path;
-    const impact = { additive: true, problems: [], affected: /* @__PURE__ */ new Map(), addedOperations: [], added: [], chains: /* @__PURE__ */ new Map(), newEntriesReaching: [] };
-    const hit = (reached, cause) => {
-      for (const [key, chain] of reached) {
-        if (impact.affected.has(key)) continue;
-        impact.affected.set(key, cause);
-        impact.chains.set(key, chain);
-      }
-    };
-    const headHere = file2.status === "deleted" ? [] : head.decls.map((d, i) => [d, i]).filter(([d]) => d.file === file2.path);
-    const baseHere = file2.status === "added" ? [] : base.decls.map((d, i) => [d, i]).filter(([d]) => d.file === oldPath);
-    if (file2.status === "added") {
-      const starts = headHere.map(([, i]) => i);
-      hit(h.entriesReaching(starts, existing), file2.path);
-      impact.newEntriesReaching = [...h.entriesReaching(starts, added).keys()].sort(compareStrings);
-      impact.added = headHere.map(([d]) => short(d.id)).sort(compareStrings);
-    }
-    for (const [d, i] of file2.status === "added" ? [] : headHere) {
-      const before = b.byId.get(d.id);
-      if (before === void 0 && !isStartup(d.id)) {
-        impact.added.push(short(d.id));
-        continue;
-      }
-      if (before !== void 0 && b.decl(before).core === d.core) continue;
-      if (options.erasedTypes === true && d.kind === "type") {
-        impact.erased = [...impact.erased ?? [], short(d.id)];
-        continue;
-      }
-      impact.problems.push(`${d.kind} ${short(d.id)} ${before === void 0 ? "added (runs at startup)" : "changed"}`);
-      hit(h.entriesReaching([i], existing), short(d.id));
-    }
-    for (const [d, i] of baseHere) {
-      if (h.byId.has(d.id) || options.erasedTypes === true && d.kind === "type") continue;
-      impact.problems.push(`${d.kind} ${short(d.id)} was removed`);
-      hit(b.entriesReaching([i], existing), short(d.id));
-    }
-    for (const entry of head.entries) {
-      if (entry.file !== file2.path) continue;
-      if (added.has(entry.key)) {
-        impact.addedOperations.push(entry.key);
-        continue;
-      }
-      const before = options.existing ? void 0 : base.entries.find((e) => e.key === entry.key);
-      if (before && (b.anchorIds(before) !== h.anchorIds(entry) || before.inline !== entry.inline) && !impact.affected.has(entry.key)) {
-        impact.problems.push(`entry point ${entry.key} now runs different code (handler or middlewares)`);
-        impact.affected.set(entry.key, "registration");
-        impact.chains.set(entry.key, [file2.path]);
-      }
-    }
-    for (const entry of options.existing ? [] : base.entries) if (entry.file === oldPath && !headKeys.has(entry.key)) impact.problems.push(`entry point ${entry.key} was removed`);
-    result.set(file2.path, impact);
-  }
-  const reportedRemoved = new Set((options.existing ? [] : base.entries).filter((e) => !headKeys.has(e.key) && result.has(e.file)).map((e) => e.key));
-  const orphans = (options.existing ? [] : base.entries).filter((e) => !headKeys.has(e.key) && !reportedRemoved.has(e.key)).map((e) => e.key);
-  if (orphans.length > 0) {
-    const registrationChanged = [...result.keys()].filter((path3) => head.decls.some((d) => d.file === path3 && d.hash !== d.core && b.byId.has(d.id) && b.decl(b.byId.get(d.id) ?? -1).hash !== d.hash));
-    for (const path3 of registrationChanged.length > 0 ? registrationChanged : [...result.keys()]) {
-      const impact = result.get(path3);
-      for (const key of orphans) impact?.problems.push(`entry point ${key} was removed`);
-    }
-  }
-  for (const impact of result.values()) {
-    impact.additive = impact.problems.length === 0;
-    impact.added = sortedUnique(impact.added);
-    impact.addedOperations = sortedUnique(impact.addedOperations);
-    impact.affected = new Map([...impact.affected.entries()].sort(([x], [y]) => compareStrings(x, y)));
-  }
-  return result;
-}
-
 // src/decls/types.ts
 var line2 = external_exports.number().int().nonnegative();
 var DeclHelperSchema = external_exports.object({
@@ -249293,7 +249308,12 @@ var DeclHelperSchema = external_exports.object({
     })
   ),
   problems: external_exports.array(external_exports.object({ file: external_exports.string(), line: line2, kind: external_exports.enum(["type-error", "parse-error", "dynamic-route"]), detail: external_exports.string() })),
-  comments: external_exports.array(external_exports.object({ file: external_exports.string(), line: line2, text: external_exports.string() }))
+  comments: external_exports.array(external_exports.object({ file: external_exports.string(), line: line2, text: external_exports.string() })),
+  /**
+   * Per file, what declaration hashes leave out, as sorted entries: "bind <name> <source…>" for each name an import
+   * binds, "effect …" for side-effect and re-export imports, compiler directives and comments that change emitted code.
+   */
+  headers: external_exports.record(external_exports.string(), external_exports.array(external_exports.string())).optional()
 });
 
 // src/cli/lang-workspace.ts
@@ -251305,7 +251325,7 @@ function moduleDecls(sf) {
   const out = [];
   const code2 = [];
   for (const s of sf.statements) {
-    if (import_typescript21.default.isImportDeclaration(s) || import_typescript21.default.isImportEqualsDeclaration(s) || import_typescript21.default.isExportDeclaration(s) && s.moduleSpecifier !== void 0) continue;
+    if (isImportLike(s)) continue;
     if (import_typescript21.default.isFunctionDeclaration(s)) out.push({ name: s.name?.text ?? "default", kind: "func", node: s });
     else if (import_typescript21.default.isClassDeclaration(s)) {
       const cls = s.name?.text ?? "default";
@@ -251347,6 +251367,30 @@ function toDecl(sf, file2, d) {
   const hash2 = declHash(sf, d);
   return { id: `${file2}#${d.name}`, file: file2, line: start, end, kind: d.kind, hash: hash2, core: hash2 };
 }
+var isImportLike = (s) => import_typescript21.default.isImportDeclaration(s) || import_typescript21.default.isImportEqualsDeclaration(s) || import_typescript21.default.isExportDeclaration(s) && s.moduleSpecifier !== void 0;
+function fileHeader(sf) {
+  const out = [];
+  for (const s of sf.statements) {
+    if (import_typescript21.default.isImportDeclaration(s) && import_typescript21.default.isStringLiteral(s.moduleSpecifier)) {
+      const from = s.moduleSpecifier.text;
+      const clause = s.importClause;
+      if (clause === void 0) out.push(`effect import ${from}`);
+      else if (clause.phaseModifier !== import_typescript21.default.SyntaxKind.TypeKeyword) {
+        if (clause.name) out.push(`bind ${clause.name.text} ${from} default`);
+        const bindings = clause.namedBindings;
+        if (bindings && import_typescript21.default.isNamespaceImport(bindings)) out.push(`bind ${bindings.name.text} ${from} *`);
+        else for (const e of bindings?.elements ?? []) if (!e.isTypeOnly) out.push(`bind ${e.name.text} ${from} ${(e.propertyName ?? e.name).text}`);
+      }
+    } else if (import_typescript21.default.isImportEqualsDeclaration(s)) {
+      if (!s.isTypeOnly) out.push(`bind ${s.name.text} ${tokenHash(sf, s.moduleReference)}`);
+    } else if (isImportLike(s)) out.push(`effect ${tokenHash(sf, s)}`);
+    for (const c of codeComments(s, sf)) out.push(`effect comment ${tokenHash(sf, s)} ${c}`);
+  }
+  return out.sort(compareStrings);
+}
+function baseHeader(file2, code2) {
+  return fileHeader(parseIsolated(file2, code2).sourceFile);
+}
 function baseDecls(file2, code2) {
   const { sourceFile: sf } = parseIsolated(file2, code2);
   return moduleDecls(sf).map((d) => toDecl(sf, file2, d));
@@ -251360,10 +251404,12 @@ function tsDeclGraph(input2) {
   const nodes = [];
   const byNode = /* @__PURE__ */ new Map();
   const files = [];
+  const headers = {};
   for (const sf of input2.project.program.getSourceFiles()) {
     if (sf.isDeclarationFile || !isProject(sf.fileName)) continue;
     const file2 = rel(sf.fileName);
     files.push(file2);
+    headers[file2] = fileHeader(sf);
     const classIndex = /* @__PURE__ */ new Map();
     for (const d of moduleDecls(sf)) {
       byNode.set(d.node, decls.length);
@@ -251435,7 +251481,8 @@ function tsDeclGraph(input2) {
     edges: [...edges].map((e) => e.split(",").map(Number)),
     entries,
     problems: [],
-    comments: []
+    comments: [],
+    headers
   };
 }
 
@@ -251603,11 +251650,11 @@ async function runAnalyze(ctx, options, deps) {
       const typeOnlyFiles = new Set(tsModified.filter((p) => isTypeOnlyModule(p, tsBase.get(p) ?? "x") && isTypeOnlyModule(p, tsHead.get(p) ?? "x")));
       const declChanged = ws.backend ? [] : files.filter((f) => f.status !== "renamed" && roleOf(f.path) === "source" && /\.(ts|tsx|mts|cts)$/.test(f.path) && !typeOnlyFiles.has(f.path) && !commentsOnlyFiles.has(f.path));
       const declBaseText = await readFiles(ctx.repoRoot, mb, declChanged.filter((f) => f.status !== "added").map((f) => f.oldPath ?? f.path));
-      const head = declChanged.length === 0 ? { module: "", files: [], decls: [], edges: [], entries: [], problems: [], comments: [] } : tsDeclGraph({ project: ws.project, repoRoot: toPosix(ctx.repoRoot), isOrigin: (p) => {
+      const head = declChanged.length === 0 ? { module: "", files: [], decls: [], edges: [], entries: [], problems: [], comments: [], headers: {} } : tsDeclGraph({ project: ws.project, repoRoot: toPosix(ctx.repoRoot), isOrigin: (p) => {
         const r = roleOf(p);
         return r !== "test" && r !== "story" && r !== "excluded" && r !== "outside";
       }, routes: ws.routes });
-      const baseOut = { module: "", files: [], decls: [...declBaseText].flatMap(([p, code2]) => baseDecls(p, code2)), edges: [], entries: [], problems: [], comments: [] };
+      const baseOut = { module: "", files: [], decls: [...declBaseText].flatMap(([p, code2]) => baseDecls(p, code2)), edges: [], entries: [], problems: [], comments: [], headers: Object.fromEntries([...declBaseText].map(([p, code2]) => [p, baseHeader(p, code2)])) };
       const existing = new Set((baseRoutes ?? ws.routes).routes.map((r) => r.key));
       const declImpactMap = declImpacts(baseOut, head, declChanged, () => true, { existing, erasedTypes: true });
       lap("base");

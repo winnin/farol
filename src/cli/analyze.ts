@@ -25,7 +25,7 @@ import { isCommentsOnlyChange, isTypeOnlyModule } from '../classify/additive.js'
 import { isDeclarationsOnlyModule, isScriptFile } from '../classify/declarations-only.js'
 import { contractsSection, helperContractChanges } from '../contracts/entries.js'
 import { diffGoMod } from '../golang/gomod.js'
-import { baseDecls, tsDeclGraph } from '../project/decls.js'
+import { baseDecls, baseHeader, tsDeclGraph } from '../project/decls.js'
 import { declImpacts } from '../decls/impact.js'
 import type { AnalysisRole } from '../classify/roles.js'
 import { KEY_SEPARATOR } from '../routes/paths.js'
@@ -255,8 +255,8 @@ export async function runAnalyze(ctx: Context, options: AnalyzeOptions, deps: An
       // resolver-level impacts, which follow globals the declaration graph would merge into the bootstrap code.
       const declChanged = ws.backend ? [] : files.filter((f) => f.status !== 'renamed' && roleOf(f.path) === 'source' && /\.(ts|tsx|mts|cts)$/.test(f.path) && !typeOnlyFiles.has(f.path) && !commentsOnlyFiles.has(f.path))
       const declBaseText = await readFiles(ctx.repoRoot, mb, declChanged.filter((f) => f.status !== 'added').map((f) => f.oldPath ?? f.path))
-      const head = declChanged.length === 0 ? { module: '', files: [], decls: [], edges: [], entries: [], problems: [], comments: [] } : tsDeclGraph({ project: ws.project, repoRoot: toPosix(ctx.repoRoot), isOrigin: (p) => { const r = roleOf(p); return r !== 'test' && r !== 'story' && r !== 'excluded' && r !== 'outside' }, routes: ws.routes })
-      const baseOut = { module: '', files: [], decls: [...declBaseText].flatMap(([p, code]) => baseDecls(p, code)), edges: [], entries: [], problems: [], comments: [] }
+      const head = declChanged.length === 0 ? { module: '', files: [], decls: [], edges: [], entries: [], problems: [], comments: [], headers: {} } : tsDeclGraph({ project: ws.project, repoRoot: toPosix(ctx.repoRoot), isOrigin: (p) => { const r = roleOf(p); return r !== 'test' && r !== 'story' && r !== 'excluded' && r !== 'outside' }, routes: ws.routes })
+      const baseOut = { module: '', files: [], decls: [...declBaseText].flatMap(([p, code]) => baseDecls(p, code)), edges: [], entries: [], problems: [], comments: [], headers: Object.fromEntries([...declBaseText].map(([p, code]) => [p, baseHeader(p, code)])) }
       const existing = new Set((baseRoutes ?? ws.routes).routes.map((r) => r.key))
       const declImpactMap = declImpacts(baseOut, head, declChanged, () => true, { existing, erasedTypes: true })
       lap('base')

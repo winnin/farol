@@ -12,6 +12,7 @@ import { classificationFrom, reason, REASONS, sortReasons, type Classification, 
 import type { AnalysisRole } from './roles.js'
 import { computeRisk, type FileRisk } from './risk.js'
 import type { BackendFileImpact } from '../backend/impact.js'
+import { HEADER_CHANGED } from '../decls/impact.js'
 import { describeChange, sortChanges, type ManifestDiff } from './dependencies.js'
 
 export interface ClassifyInput {
@@ -243,10 +244,11 @@ export function classify(input: ClassifyInput): ClassifyResult {
     }
     // Modified existing file: only routes, barrel and i18n files can be additive.
     const sourceImpact = role === 'source' ? impactOf(file.path) : undefined
-    // TypeScript declarations leave imports out: nothing added or changed is no proof that nothing changed (a file can
-    // swap an import for another module). Only the printer check above proves comments-only; such a file is read whole.
+    // JS/TS: only the printer check above proves comments-only, and a change to imports, re-exports or code comments
+    // is outside every declaration. Such a file is read whole (file-level reach follows re-exports too).
     const nothingDeclared = sourceImpact !== undefined && sourceImpact.additive && sourceImpact.addedOperations.length === 0 && sourceImpact.added.length === 0 && (sourceImpact.erased?.length ?? 0) === 0
-    const declImpact = nothingDeclared && isScriptFile(file.path) ? undefined : sourceImpact
+    const headerChanged = sourceImpact?.problems.includes(HEADER_CHANGED) === true
+    const declImpact = (nothingDeclared || headerChanged) && isScriptFile(file.path) ? undefined : sourceImpact
     if (declImpact) {
       // Declaration-level impact (Go): only changed or removed declarations count, with the entry points they reach.
       out.additive = declImpact.additive

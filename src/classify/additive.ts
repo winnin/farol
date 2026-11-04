@@ -187,15 +187,16 @@ export function isTypeOnlyModule(file: string, code: string): boolean {
 }
 
 const SCRIPT_FILE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/
-/** Comments that change emitted or bundled code: JSX pragmas, pure annotations, bundler hints. */
-const CODE_COMMENT = /@jsx|[#@]__(?:PURE|NO_SIDE_EFFECTS)__|webpack[A-Z]|@vite-ignore/
+/** Comments that change emitted or bundled code: triple-slash directives, JSX pragmas, pure annotations, bundler hints. */
+const CODE_COMMENT = /^\/\/\/\s*<|@jsx|[#@]__(?:PURE|NO_SIDE_EFFECTS)__|webpack[A-Z]|@vite-ignore/
 const PRINTER = ts.createPrinter({ removeComments: true })
 
 /**
- * The comments of a file that change emitted or bundled code, each whole and with the index of the code token it sits
- * before: the same marker before another call or import is a different comment.
+ * The comments in a node (a file, or a statement with the comments above it) that change emitted or bundled code, each
+ * whole and with the index of the code token it sits before: the same marker before another call or import is a
+ * different comment.
  */
-function codeComments(sf: ts.SourceFile): string[] {
+export function codeComments(root: ts.Node, sf: ts.SourceFile): string[] {
   const out: string[] = []
   let index = 0
   const visit = (node: ts.Node): void => {
@@ -214,7 +215,7 @@ function codeComments(sf: ts.SourceFile): string[] {
     }
     index++
   }
-  visit(sf)
+  visit(root)
   return out
 }
 
@@ -232,5 +233,5 @@ export function isCommentsOnlyChange(file: string, base: string, head: string): 
   const before = parse(base)
   const after = parse(head)
   if (before === null || after === null || PRINTER.printFile(before) !== PRINTER.printFile(after)) return false
-  return isDeepStrictEqual(codeComments(before), codeComments(after))
+  return isDeepStrictEqual(codeComments(before, before), codeComments(after, after))
 }
