@@ -7,3 +7,4 @@ coverage/
 .vitest/
 /farol-history/
 __pycache__/
+/go-helper/gohelper

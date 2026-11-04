@@ -34,6 +34,11 @@ export const DeclHelperSchema = z.object({
   ),
   problems: z.array(z.object({ file: z.string(), line, kind: z.enum(['type-error', 'parse-error', 'dynamic-route']), detail: z.string() })),
   comments: z.array(z.object({ file: z.string(), line, text: z.string() })),
+  /**
+   * Per file, what declaration hashes leave out, as sorted entries: "bind <name> <source…>" for each name an import
+   * binds, "effect …" for side-effect and re-export imports, compiler directives and comments that change emitted code.
+   */
+  headers: z.record(z.string(), z.array(z.string())).optional(),
 })
 
 export type DeclHelperOutput = z.infer<typeof DeclHelperSchema>

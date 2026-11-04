@@ -18,6 +18,21 @@ MODULE_CODE = "<module>"
 MAIN_CODE = "<main>"
 
 
+def file_header(tree: ast.Module) -> list[str]:
+    """What declarations leave out (see src/project/decls.ts): the name each module-level import binds
+    ("bind <name> <module> <imported>"), and star imports ("effect …")."""
+    out: list[str] = []
+    for stmt in tree.body:
+        if isinstance(stmt, ast.Import):
+            for alias in stmt.names:
+                out.append(f"bind {alias.asname or alias.name.split('.')[0]} {alias.name} *")
+        elif isinstance(stmt, ast.ImportFrom):
+            module = "." * stmt.level + (stmt.module or "")
+            for alias in stmt.names:
+                out.append(f"effect from {module} import *" if alias.name == "*" else f"bind {alias.asname or alias.name} {module} {alias.name}")
+    return sorted(out)
+
+
 def is_main_guard(stmt: ast.stmt) -> bool:
     """`if __name__ == "__main__":` — code that runs only when the file is executed as a script."""
     if not isinstance(stmt, ast.If) or not isinstance(stmt.test, ast.Compare):
