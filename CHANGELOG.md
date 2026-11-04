@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- **Expo Router.** `routes.adapter` `expo-router` reads file-based routing of Expo and React Native apps from `app/` or `src/app/`: screens, `_layout` layouts, groups (including `(a,b)`), dynamic segments, API routes (`+api`), `+not-found`, the root `+native-intent`, `+html` and `+middleware`, and platform modules (`about.ios.tsx`) as part of their route.
+- **Expo Router.** `routes.adapter` `expo-router` reads file-based routing of Expo and React Native apps from `src/app/` or `app/` (the one Expo CLI picks): screens, `_layout` layouts, groups (including `(a,b)`), dynamic segments, API routes (`+api`), `+not-found`, the root `+native-intent`, `+html` and `+middleware`, and platform modules (`about.ios.tsx`) as part of their route.
 
 ## 0.2.1 — 2026-10-26
 

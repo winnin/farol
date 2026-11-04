@@ -230,7 +230,7 @@ Reports and CI are the same as for [React Router](#react-frontend-react-router).
 
 ### Expo Router
 
-File-based routing for Expo and React Native apps: every screen under `app/` (or `src/app/`), with the `_layout` of
+File-based routing for Expo and React Native apps: every screen under `src/app/` (or `app/`), with the `_layout` of
 every folder above it as its layouts, API routes (`+api`), `+not-found`, and the root `+native-intent`, `+html` and
 `+middleware` that run before every screen. Groups (`(tabs)`, `(a,b)`), dynamic segments (`[id]`, `[...rest]`) and
 platform modules (`about.ios.tsx` is part of `about.tsx`) are understood.
@@ -242,8 +242,8 @@ platform modules (`about.ios.tsx` is part of `about.tsx`) are understood.
 }
 ```
 
-`app/` and `src/app/` are found in the project; set `"dir"` to the routes directory when it lives elsewhere. Reports and
-CI are the same as for [React Router](#react-frontend-react-router).
+`src/app/` (or else `app/`) is found in the project, as Expo CLI picks it; set `"dir"` to the routes directory when it
+lives elsewhere. Reports and CI are the same as for [React Router](#react-frontend-react-router).
 
 ### TypeScript API (GraphQL or REST)
 

@@ -1,7 +1,7 @@
 import { posix } from 'node:path'
 import { compareStrings } from '../../output/order.js'
 import type { DynamicRoute, RouteAdapter, RouteAdapterInput, RouteEntry, RouteTable } from '../types.js'
-import { routeModulePath, routeTable, urlPath } from '../files.js'
+import { ROUTE_EXTENSIONS, routeTable, urlPath } from '../files.js'
 
 const PLATFORMS = new Set(['ios', 'android', 'native', 'web'])
 /** Root modules around every screen: server middleware, the deep-link rewriter, the web document. */
@@ -15,22 +15,37 @@ function has(files: readonly string[], dir: string): boolean {
 }
 
 /**
- * The routes directory. A project (it holds `package.json`) is never one: its `app/` or `src/app/` is. Another directory
- * is the routes directory when it is named `app` or has a root `_layout` (a custom `root`); otherwise its `app/` or
- * `src/app/`. Null when there is none.
+ * `dir/a/b.tsx` → `a/b` for every module under `dir`. Unlike the other file-system routers, tests, stories, mocks and
+ * declaration files are modules too: Expo Router loads every `.tsx`/`.ts`/`.jsx`/`.js` file of its directory.
+ */
+function modulePath(dir: string, file: string): string | null {
+  const prefix = dir === '' ? '' : `${dir}/`
+  const ext = ROUTE_EXTENSIONS.find((e) => file.endsWith(e))
+  return file.startsWith(prefix) && ext !== undefined ? file.slice(prefix.length, -ext.length) : null
+}
+
+/**
+ * The routes directory. A project (it holds `package.json`) is never one: its `src/app/` is when it exists, else its
+ * `app/`, as Expo CLI picks them. Another directory is the routes directory when it is named `app` or has a root
+ * `_layout` (a custom `root`); otherwise its `src/app/` or `app/`. Null when there is none.
  */
 function routesDir(input: RouteAdapterInput): string | null {
   const at = (d: string): string => (input.file === '' ? d : `${input.file}/${d}`)
-  const isRootLayout = (f: string): boolean => splitPlatform(routeModulePath(input.file, f) ?? '').stem === '_layout'
+  const isRootLayout = (f: string): boolean => isLayout(splitPlatform(modulePath(input.file, f) ?? '').stem)
   const project = input.files.includes(at('package.json'))
   if (!project && (posix.basename(input.file) === 'app' || input.files.some(isRootLayout))) return input.file
-  return [at('app'), at('src/app')].find((d) => has(input.files, d)) ?? null
+  return [at('src/app'), at('app')].find((d) => has(input.files, d)) ?? null
 }
 
 /** `about.web` → `about` on `web`: a platform-specific module belongs to the route of its universal module (platform ''). */
 function splitPlatform(name: string): { stem: string; platform: string } {
   const dot = name.lastIndexOf('.')
   return dot > 0 && PLATFORMS.has(name.slice(dot + 1)) ? { stem: name.slice(0, dot), platform: name.slice(dot + 1) } : { stem: name, platform: '' }
+}
+
+/** Expo Router reads the name before the first dot: `_layout.test.tsx` is a layout too. */
+function isLayout(stem: string): boolean {
+  return stem.split('.')[0] === '_layout'
 }
 
 function isGroup(segment: string): boolean {
@@ -72,7 +87,7 @@ function modulesOf(variants: Variants | undefined): string[] {
  */
 function extract(input: RouteAdapterInput): RouteTable {
   const dir = routesDir(input)
-  if (dir === null) return routeTable([], [{ file: input.file === '' ? '.' : input.file, line: 1, detail: `no Expo Router routes directory found: expected app/ or src/app/ in ${input.file === '' ? 'the project' : input.file}, or set routes.dir to it` }], [])
+  if (dir === null) return routeTable([], [{ file: input.file === '' ? '.' : input.file, line: 1, detail: `no Expo Router routes directory found: expected src/app/ or app/ in ${input.file === '' ? 'the project' : input.file}, or set routes.dir to it` }], [])
   const dynamic: DynamicRoute[] = []
   const layoutsIn = new Map<string, Variants>()
   const root = new Map<string, Variants>()
@@ -89,12 +104,12 @@ function extract(input: RouteAdapterInput): RouteTable {
     return variants
   }
   for (const file of input.files) {
-    const rel = routeModulePath(dir, file)
+    const rel = modulePath(dir, file)
     if (rel === null) continue
     const folder = rel.split('/')
     const { stem, platform } = splitPlatform(folder.pop() ?? '')
     const api = stem.endsWith(API_SUFFIX)
-    if (stem === '_layout') add(variantsOf(layoutsIn, folder.join('/')), platform, file, `layout /${folder.join('/')}`)
+    if (isLayout(stem)) add(variantsOf(layoutsIn, folder.join('/')), platform, file, `layout /${folder.join('/')}`)
     else if (folder.length === 0 && platform === '' && ROOT_MODULES.includes(stem)) add(variantsOf(root, stem), platform, file, stem)
     else if (api && platform !== '') dynamic.push({ file, line: 1, detail: 'Expo Router API routes cannot have platform extensions' })
     else if ((stem.startsWith('+') && stem !== '+not-found' && !api) || isGroup(stem)) dynamic.push({ file, line: 1, detail: `${stem} is not an Expo Router route name` })

@@ -102,14 +102,14 @@ additive rules, the score) is the same as for React Router.
 - URL paths: pathless (`_app`) and group (`(group)`) segments are dropped, `$id` reads as `:id`, `{-$id}` as `:id`, `$` as `*`, a trailing `_` (un-nested route) is removed.
 - Files and folders starting with `-` are ignored, as the router does.
 
-**Expo Router** (`routes.dir`: the routes directory; by default `app/` in the project, or `src/app/` when only that
-exists). A project (a directory holding `package.json`) is never the routes directory, even with a stray `_layout` at
-its root. Another configured directory is the routes directory when it is named `app` or holds a root `_layout` (a
-custom `root`); otherwise farol looks for `app/` and `src/app/` in it. Without one, the table is a *dynamic route* (the
-PR is `unknown`).
+**Expo Router** (`routes.dir`: the routes directory; by default `src/app/` in the project when it exists, else `app/`,
+as Expo CLI picks them). A project (a directory holding `package.json`) is never the routes directory, even with a stray
+`_layout` at its root. Another configured directory is the routes directory when it is named `app` or holds a root
+`_layout` (a custom `root`); otherwise farol looks for `src/app/`, then `app/`, in it. Without one, the table is a
+*dynamic route* (the PR is `unknown`).
 
-- Every module (`.tsx`, `.ts`, `.jsx`, `.js`) is a screen; `index` is its folder's path. `[id]` reads as `:id`, `[...rest]` as `*`. Route groups `(group)` and `(a,b)` are left out of the URL; the key keeps the folder path (Expo Router's own route name), so two groups with the same URL stay apart.
-- The `_layout` of every folder above a screen, root included, is one of its layouts.
+- Every module (`.tsx`, `.ts`, `.jsx`, `.js`) is a screen, tests and stories included: Expo Router loads every module of its directory, so `Card.test.tsx` there is the screen `/Card.test`. `index` is its folder's path. `[id]` reads as `:id`, `[...rest]` as `*`. Route groups `(group)` and `(a,b)` are left out of the URL; the key keeps the folder path (Expo Router's own route name), so two groups with the same URL stay apart.
+- The `_layout` of every folder above a screen, root included, is one of its layouts (Expo Router reads the name before the first dot, so `_layout.test.tsx` is a layout too).
 - `name+api` modules are API routes at `name`; they get no screen layouts.
 - `+not-found` is a screen for every unmatched URL below its folder (path `…/*`).
 - At the root, `+middleware` (server middleware) runs before every screen and API route; `+native-intent` (rewrites every incoming deep link) and `+html` (the web document) are layouts of every screen.

@@ -146,8 +146,9 @@ File-based routing for Expo and React Native apps, read from the file names (no 
 }
 ```
 
-- **`routes.dir`**: the routes directory. By default `app/` in the project, or `src/app/` when only that exists.
-- Every module is a screen; `index` is its folder's path; `[id]` reads as `:id`, `[...rest]` as `*`. Groups `(tabs)`
+- **`routes.dir`**: the routes directory. By default `src/app/` in the project when it exists, else `app/`, as Expo CLI
+  picks them.
+- Every module is a screen, tests included (Expo Router loads them all); `index` is its folder's path; `[id]` reads as `:id`, `[...rest]` as `*`. Groups `(tabs)`
   and `(a,b)` are left out of the URL.
 - The `_layout` of every folder above a screen is its layout: a change there affects every screen under it.
 - `name+api.ts` modules are API routes; `+not-found` is a screen. `+native-intent` and `+html` at the root are layouts

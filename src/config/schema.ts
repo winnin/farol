@@ -113,7 +113,7 @@ export const ConfigSchema = z
         /** react-router: a route table in `file`. next, tanstack-router, expo-router: file-system routing under `dir`. */
         adapter: z.enum(['react-router', 'next', 'tanstack-router', 'expo-router']).default('react-router'),
         file: z.string().min(1, 'routes.file must point to the file with the route table, e.g. "src/routes.tsx"').optional(),
-        /** File-system routers: next → the directory holding pages/ and app/ (default: the project, or its src/); tanstack-router → the routes directory (default "src/routes"); expo-router → the routes directory, or a directory holding app/ or src/app/ (default: the project). */
+        /** File-system routers: next → the directory holding pages/ and app/ (default: the project, or its src/); tanstack-router → the routes directory (default "src/routes"); expo-router → the routes directory, or a directory holding src/app/ or app/ (default: the project). */
         dir: z.string().optional(),
         /** Other modules that only define routes (split route trees): they get the routes rule instead of the source rule. */
         extraFiles: globs.default([]),

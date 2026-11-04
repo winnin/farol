@@ -5,7 +5,7 @@ import type { DynamicRoute, RouteEntry, RouteTable } from './types.js'
 /** Extensions of route modules in file-system routers (Next.js `pageExtensions` default, TanStack Router, Expo Router). */
 export const ROUTE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js']
 
-/** Tests, stories, mocks and declaration files never define routes, even inside a routes directory. */
+/** Tests, stories, mocks and declaration files never define routes, even inside a routes directory (Expo Router aside: it loads them all). */
 export function isNonRouteFile(file: string): boolean {
   const name = posix.basename(file)
   if (name.endsWith('.d.ts') || /\.(test|spec|stories)\.[cm]?[jt]sx?$/.test(name)) return true

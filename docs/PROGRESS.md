@@ -155,6 +155,7 @@ Milestones from `docs/SPEC.md`. Each one is done only when its acceptance criter
 ### Expo Router adapter — done (first version)
 - `routes.adapter: "expo-router"` (`src/routes/expo-router/`): screens, `_layout` layouts, groups, dynamic segments, `+api` routes, `+not-found`, root `+middleware`/`+native-intent`/`+html`, platform modules; what Expo Router refuses to load is a dynamic route. See DECISIONS 2026-11-02.
 - Checked on a production Expo app (228 screens and API routes, 8 layouts): no dynamic entry; on six merged PRs, changed files went from no entry point (`surface: "backend"`, the only option before) to the screens they reach. Its root `_layout` imports the i18n bundle, so a locale or provider change reaches every screen, as a Next.js root layout would.
+- Maintainer review: `src/app/` is read before `app/` (as Expo CLI), and tests, stories and mocks under the routes directory are screens (Expo Router loads them all). See DECISIONS 2026-11-04.
 - Open: Expo Router `redirects`/`rewrites` from the app config are not read.
 
 ### Known limitations / open questions

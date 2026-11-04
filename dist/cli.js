@@ -8732,8 +8732,8 @@ ${lanes.join("\n")}
             base64encode: (input2) => Buffer.from(input2).toString("base64"),
             require: (baseDir, moduleName) => {
               try {
-                const modulePath = resolveJSModule(moduleName, baseDir, nodeSystem);
-                return { module: __require(modulePath), modulePath, error: void 0 };
+                const modulePath2 = resolveJSModule(moduleName, baseDir, nodeSystem);
+                return { module: __require(modulePath2), modulePath: modulePath2, error: void 0 };
               } catch (error210) {
                 return { module: void 0, modulePath: void 0, error: error210 };
               }
@@ -53692,8 +53692,8 @@ ${lanes.join("\n")}
       function getNodeModulesPackageName(compilerOptions, importingSourceFile, nodeModulesFileName, host, preferences, options = {}) {
         const info = getInfo(importingSourceFile.fileName, host);
         const modulePaths = getAllModulePaths(info, nodeModulesFileName, host, preferences, compilerOptions, options);
-        return firstDefined(modulePaths, (modulePath) => tryGetModuleNameAsNodeModule(
-          modulePath,
+        return firstDefined(modulePaths, (modulePath2) => tryGetModuleNameAsNodeModule(
+          modulePath2,
           info,
           importingSourceFile,
           host,
@@ -53707,8 +53707,8 @@ ${lanes.join("\n")}
       function getModuleSpecifierWorker(compilerOptions, importingSourceFile, importingSourceFileName, toFileName2, host, preferences, userPreferences, options = {}) {
         const info = getInfo(importingSourceFileName, host);
         const modulePaths = getAllModulePaths(info, toFileName2, host, userPreferences, compilerOptions, options);
-        return firstDefined(modulePaths, (modulePath) => tryGetModuleNameAsNodeModule(
-          modulePath,
+        return firstDefined(modulePaths, (modulePath2) => tryGetModuleNameAsNodeModule(
+          modulePath2,
           info,
           importingSourceFile,
           host,
@@ -53800,8 +53800,8 @@ ${lanes.join("\n")}
       function computeModuleSpecifiers(modulePaths, compilerOptions, importingSourceFile, host, userPreferences, options = {}, forAutoImport) {
         const info = getInfo(importingSourceFile.fileName, host);
         const preferences = getModuleSpecifierPreferences(userPreferences, host, compilerOptions, importingSourceFile);
-        const existingSpecifier = isFullSourceFile(importingSourceFile) && forEach(modulePaths, (modulePath) => forEach(
-          host.getFileIncludeReasons().get(toPath(modulePath.path, host.getCurrentDirectory(), info.getCanonicalFileName)),
+        const existingSpecifier = isFullSourceFile(importingSourceFile) && forEach(modulePaths, (modulePath2) => forEach(
+          host.getFileIncludeReasons().get(toPath(modulePath2.path, host.getCurrentDirectory(), info.getCanonicalFileName)),
           (reason2) => {
             if (reason2.kind !== 3 || reason2.file !== importingSourceFile.path) return void 0;
             const existingMode = host.getModeForResolutionAtIndex(importingSourceFile, reason2.index);
@@ -53821,9 +53821,9 @@ ${lanes.join("\n")}
         let pathsSpecifiers;
         let redirectPathsSpecifiers;
         let relativeSpecifiers;
-        for (const modulePath of modulePaths) {
-          const specifier = modulePath.isInNodeModules ? tryGetModuleNameAsNodeModule(
-            modulePath,
+        for (const modulePath2 of modulePaths) {
+          const specifier = modulePath2.isInNodeModules ? tryGetModuleNameAsNodeModule(
+            modulePath2,
             info,
             importingSourceFile,
             host,
@@ -53835,24 +53835,24 @@ ${lanes.join("\n")}
           ) : void 0;
           if (specifier && !(forAutoImport && isExcludedByRegex(specifier, preferences.excludeRegexes))) {
             nodeModulesSpecifiers = append(nodeModulesSpecifiers, specifier);
-            if (modulePath.isRedirect) {
+            if (modulePath2.isRedirect) {
               return { kind: "node_modules", moduleSpecifiers: nodeModulesSpecifiers, computedWithoutCache: true };
             }
           }
           const local = getLocalModuleSpecifier(
-            modulePath.path,
+            modulePath2.path,
             info,
             compilerOptions,
             host,
             options.overrideImportMode || importingSourceFile.impliedNodeFormat,
             preferences,
             /*pathsOnly*/
-            modulePath.isRedirect || !!specifier
+            modulePath2.isRedirect || !!specifier
           );
           if (!local || forAutoImport && isExcludedByRegex(local, preferences.excludeRegexes)) {
             continue;
           }
-          if (modulePath.isRedirect) {
+          if (modulePath2.isRedirect) {
             redirectPathsSpecifiers = append(redirectPathsSpecifiers, local);
           } else if (pathIsBareSpecifier(local)) {
             if (pathContainsNodeModules(local)) {
@@ -53860,7 +53860,7 @@ ${lanes.join("\n")}
             } else {
               pathsSpecifiers = append(pathsSpecifiers, local);
             }
-          } else if (forAutoImport || !importedFileIsInNodeModules || modulePath.isInNodeModules) {
+          } else if (forAutoImport || !importedFileIsInNodeModules || modulePath2.isInNodeModules) {
             relativeSpecifiers = append(relativeSpecifiers, local);
           }
         }
@@ -53928,13 +53928,13 @@ ${lanes.join("\n")}
         }
         if (relativePreference === 3 && !pathIsRelative(maybeNonRelative)) {
           const projectDirectory = compilerOptions.configFilePath ? toPath(getDirectoryPath(compilerOptions.configFilePath), host.getCurrentDirectory(), info.getCanonicalFileName) : info.getCanonicalFileName(host.getCurrentDirectory());
-          const modulePath = toPath(moduleFileName, projectDirectory, getCanonicalFileName);
+          const modulePath2 = toPath(moduleFileName, projectDirectory, getCanonicalFileName);
           const sourceIsInternal = startsWith(canonicalSourceDirectory, projectDirectory);
-          const targetIsInternal = startsWith(modulePath, projectDirectory);
+          const targetIsInternal = startsWith(modulePath2, projectDirectory);
           if (sourceIsInternal && !targetIsInternal || !sourceIsInternal && targetIsInternal) {
             return maybeNonRelative;
           }
-          const nearestTargetPackageJson = getNearestAncestorDirectoryWithPackageJson(host, getDirectoryPath(modulePath));
+          const nearestTargetPackageJson = getNearestAncestorDirectoryWithPackageJson(host, getDirectoryPath(modulePath2));
           const nearestSourcePackageJson = getNearestAncestorDirectoryWithPackageJson(host, sourceDirectory);
           const ignoreCase = !hostUsesCaseSensitiveFileNames(host);
           if (!packageJsonPathsAreEqual(nearestTargetPackageJson, nearestSourcePackageJson, ignoreCase)) {
@@ -236560,7 +236560,7 @@ var ConfigSchema = external_exports.object({
     /** react-router: a route table in `file`. next, tanstack-router, expo-router: file-system routing under `dir`. */
     adapter: external_exports.enum(["react-router", "next", "tanstack-router", "expo-router"]).default("react-router"),
     file: external_exports.string().min(1, 'routes.file must point to the file with the route table, e.g. "src/routes.tsx"').optional(),
-    /** File-system routers: next → the directory holding pages/ and app/ (default: the project, or its src/); tanstack-router → the routes directory (default "src/routes"); expo-router → the routes directory, or a directory holding app/ or src/app/ (default: the project). */
+    /** File-system routers: next → the directory holding pages/ and app/ (default: the project, or its src/); tanstack-router → the routes directory (default "src/routes"); expo-router → the routes directory, or a directory holding src/app/ or app/ (default: the project). */
     dir: external_exports.string().optional(),
     /** Other modules that only define routes (split route trees): they get the routes rule instead of the source rule. */
     extraFiles: globs.default([])
@@ -250017,16 +250017,24 @@ var API_SUFFIX = "+api";
 function has(files, dir) {
   return files.some((f) => f.startsWith(`${dir}/`));
 }
+function modulePath(dir, file2) {
+  const prefix = dir === "" ? "" : `${dir}/`;
+  const ext = ROUTE_EXTENSIONS.find((e) => file2.endsWith(e));
+  return file2.startsWith(prefix) && ext !== void 0 ? file2.slice(prefix.length, -ext.length) : null;
+}
 function routesDir(input2) {
   const at = (d) => input2.file === "" ? d : `${input2.file}/${d}`;
-  const isRootLayout = (f) => splitPlatform(routeModulePath(input2.file, f) ?? "").stem === "_layout";
+  const isRootLayout = (f) => isLayout(splitPlatform(modulePath(input2.file, f) ?? "").stem);
   const project = input2.files.includes(at("package.json"));
   if (!project && (posix11.basename(input2.file) === "app" || input2.files.some(isRootLayout))) return input2.file;
-  return [at("app"), at("src/app")].find((d) => has(input2.files, d)) ?? null;
+  return [at("src/app"), at("app")].find((d) => has(input2.files, d)) ?? null;
 }
 function splitPlatform(name) {
   const dot = name.lastIndexOf(".");
   return dot > 0 && PLATFORMS.has(name.slice(dot + 1)) ? { stem: name.slice(0, dot), platform: name.slice(dot + 1) } : { stem: name, platform: "" };
+}
+function isLayout(stem2) {
+  return stem2.split(".")[0] === "_layout";
 }
 function isGroup(segment) {
   return segment.startsWith("(") && segment.endsWith(")");
@@ -250045,7 +250053,7 @@ function modulesOf(variants) {
 }
 function extract(input2) {
   const dir = routesDir(input2);
-  if (dir === null) return routeTable([], [{ file: input2.file === "" ? "." : input2.file, line: 1, detail: `no Expo Router routes directory found: expected app/ or src/app/ in ${input2.file === "" ? "the project" : input2.file}, or set routes.dir to it` }], []);
+  if (dir === null) return routeTable([], [{ file: input2.file === "" ? "." : input2.file, line: 1, detail: `no Expo Router routes directory found: expected src/app/ or app/ in ${input2.file === "" ? "the project" : input2.file}, or set routes.dir to it` }], []);
   const dynamic = [];
   const layoutsIn = /* @__PURE__ */ new Map();
   const root = /* @__PURE__ */ new Map();
@@ -250061,12 +250069,12 @@ function extract(input2) {
     return variants;
   };
   for (const file2 of input2.files) {
-    const rel = routeModulePath(dir, file2);
+    const rel = modulePath(dir, file2);
     if (rel === null) continue;
     const folder = rel.split("/");
     const { stem: stem2, platform } = splitPlatform(folder.pop() ?? "");
     const api = stem2.endsWith(API_SUFFIX);
-    if (stem2 === "_layout") add(variantsOf(layoutsIn, folder.join("/")), platform, file2, `layout /${folder.join("/")}`);
+    if (isLayout(stem2)) add(variantsOf(layoutsIn, folder.join("/")), platform, file2, `layout /${folder.join("/")}`);
     else if (folder.length === 0 && platform === "" && ROOT_MODULES.includes(stem2)) add(variantsOf(root, stem2), platform, file2, stem2);
     else if (api && platform !== "") dynamic.push({ file: file2, line: 1, detail: "Expo Router API routes cannot have platform extensions" });
     else if (stem2.startsWith("+") && stem2 !== "+not-found" && !api || isGroup(stem2)) dynamic.push({ file: file2, line: 1, detail: `${stem2} is not an Expo Router route name` });

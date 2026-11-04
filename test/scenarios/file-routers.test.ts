@@ -101,4 +101,9 @@ describe('Expo Router', () => {
     expect(output.classification).toBe('touches-existing')
     expect(output.routes.affected.map((r) => r.path)).toEqual(['/cards'])
   })
+
+  it('a test file added under app/ is a new screen: Expo Router loads every module there', async () => {
+    const { output } = await analyzeRepo(repoWith(EXPO_BASE, { 'app/(tabs)/Card.test.tsx': "import { Card } from '../../components/Card'\n\ntest('renders', () => Card())\n" }))
+    expect(output.routes.added.map((r) => [r.path, r.entry])).toEqual([['/Card.test', 'app/(tabs)/Card.test.tsx']])
+  })
 })
