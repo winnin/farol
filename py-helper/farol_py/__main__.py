@@ -18,7 +18,7 @@ import sys
 import tokenize
 import warnings
 
-from .decls import Graph
+from .decls import Graph, file_header
 from .modules import collect_imports, discover
 from .routes import find_entries
 
@@ -64,6 +64,7 @@ def analyze(args: argparse.Namespace) -> dict:
         "entries": entries,
         "problems": problems + route_problems,
         "comments": comments,
+        "headers": {m.file: file_header(m.tree) for m in modules.values() if m.tree is not None},
     }
 
 

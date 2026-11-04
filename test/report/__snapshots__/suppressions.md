@@ -33,7 +33,7 @@ Most of the risk comes from `unsafe.ts`, new code not used by existing pages and
 **Class:** `isolated` — isolated: only adds new paths (new routes and files)
 
 **Reasons:**
-- only new declarations, comments or formatting (Go) (`declarations-additive`) `src/lib/legacy.ts`: only additions: new declarations src/lib/legacy.ts#version
+- only new declarations, comments or formatting (`declarations-additive`) `src/lib/legacy.ts`: only additions: new declarations src/lib/legacy.ts#version
 - new file no route reaches (`new-file-disconnected`) `src/lib/unsafe.ts`: new file that no route reaches
 - no existing code touched (`no-existing-code-touched`): the PR only adds new files, routes, exports or keys, or changes tests
 

@@ -117,11 +117,13 @@ export function scoreItems(o: Output): ScoreItem[] {
   const coverage = fileCoverage(o)
   const coverageNote = o.signals.coverage.status === 'ok' ? 'not measured' : 'coverage not verified'
   const declarationsOnly = new Set(o.files.filter((f) => f.declarationsOnly === true).map((f) => f.path))
+  // Only comments or formatting changed: the code that runs is the same, so the file adds nothing to the risk.
+  const commentsOnly = new Set(o.files.filter((f) => f.commentsOnly === true).map((f) => f.path))
   // Shared like the infra weight: one point each, five for all of them together.
   const declarationWeight = Math.min(DECLARATIONS_FILE_WEIGHT, 1 - (1 - DECLARATIONS_TOTAL_WEIGHT) ** (1 / Math.max(1, declarationsOnly.size)))
   for (const f of o.risk.files) {
     // Docs, templates and other files that are not code have no runtime behavior to weigh.
-    if (!isCode(f.path)) continue
+    if (!isCode(f.path) || commentsOnly.has(f.path)) continue
     if (declarationsOnly.has(f.path)) {
       add(f.path, 'change', declarationWeight, `added · only declarations (types, re-exports, static constants): no logic of its own`)
       continue

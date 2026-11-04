@@ -236685,7 +236685,8 @@ var package_default = {
     "dist",
     "go-helper",
     "py-helper",
-    "!**/__pycache__"
+    "!**/__pycache__",
+    "!go-helper/gohelper"
   ],
   engines: {
     node: ">=22"
@@ -237146,9 +237147,8 @@ function routeSegment(route) {
   return route.entry === null ? "(layout)" : `(layout:${route.entry})`;
 }
 
-// src/classify/additive.ts
+// src/classify/declarations-only.ts
 var import_typescript2 = __toESM(require_typescript(), 1);
-import { isDeepStrictEqual } from "util";
 
 // src/project/parse.ts
 var import_typescript = __toESM(require_typescript(), 1);
@@ -237177,7 +237177,53 @@ function parseIsolated(fileName, code2) {
   return { sourceFile, errors };
 }
 
+// src/classify/declarations-only.ts
+var SCRIPT = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
+var isScriptFile = (file2) => SCRIPT.test(file2);
+function isStaticValue(e, depth = 0, calls = true) {
+  if (depth > 20) return false;
+  const value = (x) => isStaticValue(x, depth + 1, calls);
+  if (import_typescript2.default.isArrowFunction(e)) return !import_typescript2.default.isBlock(e.body) && value(e.body);
+  if (import_typescript2.default.isCallExpression(e)) return calls && (import_typescript2.default.isIdentifier(e.expression) || import_typescript2.default.isPropertyAccessExpression(e.expression)) && value(e.expression) && e.arguments.length > 0 && e.arguments.every((a) => !import_typescript2.default.isSpreadElement(a) && isStaticValue(a, depth + 1, false));
+  if (import_typescript2.default.isStringLiteral(e) || import_typescript2.default.isNumericLiteral(e) || import_typescript2.default.isNoSubstitutionTemplateLiteral(e) || import_typescript2.default.isBigIntLiteral(e) || import_typescript2.default.isRegularExpressionLiteral(e)) return true;
+  if (e.kind === import_typescript2.default.SyntaxKind.TrueKeyword || e.kind === import_typescript2.default.SyntaxKind.FalseKeyword || e.kind === import_typescript2.default.SyntaxKind.NullKeyword) return true;
+  if (import_typescript2.default.isIdentifier(e) || import_typescript2.default.isPropertyAccessExpression(e)) return import_typescript2.default.isIdentifier(e) || value(e.expression);
+  if (import_typescript2.default.isPrefixUnaryExpression(e)) return (e.operator === import_typescript2.default.SyntaxKind.MinusToken || e.operator === import_typescript2.default.SyntaxKind.PlusToken) && value(e.operand);
+  if (import_typescript2.default.isParenthesizedExpression(e) || import_typescript2.default.isAsExpression(e) || import_typescript2.default.isSatisfiesExpression(e) || import_typescript2.default.isTypeAssertionExpression(e)) return value(e.expression);
+  if (import_typescript2.default.isTemplateExpression(e)) return e.templateSpans.every((s) => value(s.expression));
+  if (import_typescript2.default.isArrayLiteralExpression(e)) return e.elements.every((x) => import_typescript2.default.isSpreadElement(x) ? value(x.expression) : value(x));
+  if (import_typescript2.default.isObjectLiteralExpression(e)) {
+    return e.properties.every((p) => {
+      if (import_typescript2.default.isPropertyAssignment(p)) return (!import_typescript2.default.isComputedPropertyName(p.name) || value(p.name.expression)) && value(p.initializer);
+      if (import_typescript2.default.isShorthandPropertyAssignment(p)) return true;
+      if (import_typescript2.default.isSpreadAssignment(p)) return value(p.expression);
+      return false;
+    });
+  }
+  return false;
+}
+function isDeclarationsOnlyModule(file2, code2) {
+  if (!SCRIPT.test(file2) || file2.endsWith(".test.ts")) return false;
+  const { sourceFile: sf, errors } = parseIsolated(file2, code2);
+  if (errors.length > 0) return false;
+  return sf.statements.every((s) => {
+    if (import_typescript2.default.isInterfaceDeclaration(s) || import_typescript2.default.isTypeAliasDeclaration(s) || import_typescript2.default.isEnumDeclaration(s)) return true;
+    if (import_typescript2.default.isImportDeclaration(s)) return s.importClause !== void 0;
+    if (import_typescript2.default.isExportDeclaration(s)) return true;
+    if (import_typescript2.default.isExportAssignment(s)) return isStaticValue(s.expression);
+    const modifiers = import_typescript2.default.canHaveModifiers(s) ? import_typescript2.default.getModifiers(s) ?? [] : [];
+    if (modifiers.some((m) => m.kind === import_typescript2.default.SyntaxKind.DeclareKeyword)) return true;
+    if (import_typescript2.default.isVariableStatement(s)) {
+      const isConst = (s.declarationList.flags & import_typescript2.default.NodeFlags.Const) !== 0;
+      return isConst && s.declarationList.declarations.every((d) => d.initializer !== void 0 && import_typescript2.default.isIdentifier(d.name) && isStaticValue(d.initializer));
+    }
+    return false;
+  });
+}
+
 // src/classify/additive.ts
+var import_typescript3 = __toESM(require_typescript(), 1);
+import { isDeepStrictEqual } from "util";
 function sameSignature(a, b) {
   return a.entry === b.entry && isDeepStrictEqual(a.layouts, b.layouts) && isDeepStrictEqual(a.modules, b.modules);
 }
@@ -237205,7 +237251,7 @@ function compareRouteTables(base, head) {
 function importBindings(sf) {
   const result = /* @__PURE__ */ new Map();
   for (const statement of sf.statements) {
-    if (!import_typescript2.default.isImportDeclaration(statement) || !import_typescript2.default.isStringLiteral(statement.moduleSpecifier)) continue;
+    if (!import_typescript3.default.isImportDeclaration(statement) || !import_typescript3.default.isStringLiteral(statement.moduleSpecifier)) continue;
     const set2 = result.get(statement.moduleSpecifier.text) ?? /* @__PURE__ */ new Set();
     result.set(statement.moduleSpecifier.text, set2);
     for (const b of declarationBindings(statement)) set2.add(b);
@@ -237218,8 +237264,8 @@ function declarationBindings(decl) {
   const bindings = [];
   if (clause.name) bindings.push(`default as ${clause.name.text}`);
   const named = clause.namedBindings;
-  if (named && import_typescript2.default.isNamespaceImport(named)) bindings.push(`* as ${named.name.text}`);
-  if (named && import_typescript2.default.isNamedImports(named)) for (const el of named.elements) bindings.push(`${(el.propertyName ?? el.name).text} as ${el.name.text}`);
+  if (named && import_typescript3.default.isNamespaceImport(named)) bindings.push(`* as ${named.name.text}`);
+  if (named && import_typescript3.default.isNamedImports(named)) for (const el of named.elements) bindings.push(`${(el.propertyName ?? el.name).text} as ${el.name.text}`);
   return bindings;
 }
 function unexplainedRemovedLines(file2, baseCode, headCode, removed) {
@@ -237230,7 +237276,7 @@ function unexplainedRemovedLines(file2, baseCode, headCode, removed) {
   const headImports = importBindings(head.sourceFile);
   const explained = /* @__PURE__ */ new Set();
   for (const statement of base.sourceFile.statements) {
-    if (!import_typescript2.default.isImportDeclaration(statement) || !import_typescript2.default.isStringLiteral(statement.moduleSpecifier)) continue;
+    if (!import_typescript3.default.isImportDeclaration(statement) || !import_typescript3.default.isStringLiteral(statement.moduleSpecifier)) continue;
     const headSet = headImports.get(statement.moduleSpecifier.text);
     if (!headSet || !declarationBindings(statement).every((b) => headSet.has(b))) continue;
     const first = base.sourceFile.getLineAndCharacterOfPosition(statement.getStart(base.sourceFile)).line + 1;
@@ -237243,10 +237289,10 @@ function normalizedText(node2, sf) {
   return node2.getText(sf).replace(/\s+/g, " ").trim();
 }
 function exportBindings(statement) {
-  const from = statement.moduleSpecifier && import_typescript2.default.isStringLiteral(statement.moduleSpecifier) ? statement.moduleSpecifier.text : "";
+  const from = statement.moduleSpecifier && import_typescript3.default.isStringLiteral(statement.moduleSpecifier) ? statement.moduleSpecifier.text : "";
   const clause = statement.exportClause;
   if (!clause) return [`${statement.isTypeOnly ? "type " : ""}${from}:*`];
-  if (import_typescript2.default.isNamespaceExport(clause)) return [`${statement.isTypeOnly ? "type " : ""}${from}:* as ${clause.name.text}`];
+  if (import_typescript3.default.isNamespaceExport(clause)) return [`${statement.isTypeOnly ? "type " : ""}${from}:* as ${clause.name.text}`];
   return clause.elements.map((el) => `${statement.isTypeOnly || el.isTypeOnly ? "type " : ""}${from}:${(el.propertyName ?? el.name).text} as ${el.name.text}`);
 }
 function checkBarrelAdditive(file2, baseCode, headCode) {
@@ -237256,14 +237302,14 @@ function checkBarrelAdditive(file2, baseCode, headCode) {
   if (base.errors.length > 0) problems.push(`the base version does not parse: ${base.errors[0]?.message ?? ""}`);
   if (head.errors.length > 0) problems.push(`the head version does not parse: ${head.errors[0]?.message ?? ""}`);
   if (problems.length > 0) return { additive: false, problems };
-  const baseOther = base.sourceFile.statements.find((s) => !import_typescript2.default.isExportDeclaration(s));
-  const headOther = head.sourceFile.statements.find((s) => !import_typescript2.default.isExportDeclaration(s));
+  const baseOther = base.sourceFile.statements.find((s) => !import_typescript3.default.isExportDeclaration(s));
+  const headOther = head.sourceFile.statements.find((s) => !import_typescript3.default.isExportDeclaration(s));
   const versions = baseOther && headOther ? "the file contains" : baseOther ? "the base version contains" : "the head version contains";
   const other = headOther ? normalizedText(headOther, head.sourceFile) : baseOther ? normalizedText(baseOther, base.sourceFile) : void 0;
   if (other !== void 0) problems.push(`${versions} a statement that is not an export declaration (not a pure barrel): "${other.slice(0, 80)}"`);
-  const headBindings = new Set(head.sourceFile.statements.flatMap((s) => import_typescript2.default.isExportDeclaration(s) ? exportBindings(s) : []));
+  const headBindings = new Set(head.sourceFile.statements.flatMap((s) => import_typescript3.default.isExportDeclaration(s) ? exportBindings(s) : []));
   for (const s of base.sourceFile.statements) {
-    if (import_typescript2.default.isExportDeclaration(s) && !exportBindings(s).every((b) => headBindings.has(b))) problems.push(`export removed or changed: "${normalizedText(s, base.sourceFile)}"`);
+    if (import_typescript3.default.isExportDeclaration(s) && !exportBindings(s).every((b) => headBindings.has(b))) problems.push(`export removed or changed: "${normalizedText(s, base.sourceFile)}"`);
   }
   return { additive: problems.length === 0, problems };
 }
@@ -237306,12 +237352,47 @@ function isTypeOnlyModule(file2, code2) {
   const { sourceFile: sf, errors } = parseIsolated(file2, code2);
   if (errors.length > 0) return false;
   return sf.statements.every((s) => {
-    if (import_typescript2.default.isInterfaceDeclaration(s) || import_typescript2.default.isTypeAliasDeclaration(s)) return true;
-    if (import_typescript2.default.isImportDeclaration(s)) return s.importClause !== void 0;
-    if (import_typescript2.default.isExportDeclaration(s)) return s.isTypeOnly || s.exportClause !== void 0 && import_typescript2.default.isNamedExports(s.exportClause) && s.exportClause.elements.every((e) => e.isTypeOnly);
-    const modifiers = import_typescript2.default.canHaveModifiers(s) ? import_typescript2.default.getModifiers(s) ?? [] : [];
-    return modifiers.some((m) => m.kind === import_typescript2.default.SyntaxKind.DeclareKeyword) && !import_typescript2.default.isEnumDeclaration(s) && !import_typescript2.default.isVariableStatement(s);
+    if (import_typescript3.default.isInterfaceDeclaration(s) || import_typescript3.default.isTypeAliasDeclaration(s)) return true;
+    if (import_typescript3.default.isImportDeclaration(s)) return s.importClause !== void 0;
+    if (import_typescript3.default.isExportDeclaration(s)) return s.isTypeOnly || s.exportClause !== void 0 && import_typescript3.default.isNamedExports(s.exportClause) && s.exportClause.elements.every((e) => e.isTypeOnly);
+    const modifiers = import_typescript3.default.canHaveModifiers(s) ? import_typescript3.default.getModifiers(s) ?? [] : [];
+    return modifiers.some((m) => m.kind === import_typescript3.default.SyntaxKind.DeclareKeyword) && !import_typescript3.default.isEnumDeclaration(s) && !import_typescript3.default.isVariableStatement(s);
   });
+}
+var SCRIPT_FILE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
+var CODE_COMMENT = /^\/\/\/\s*<|@jsx|[#@]__(?:PURE|NO_SIDE_EFFECTS)__|webpack[A-Z]|@vite-ignore/;
+var PRINTER = import_typescript3.default.createPrinter({ removeComments: true });
+function codeComments(root, sf) {
+  const out = [];
+  let index = 0;
+  const visit3 = (node2) => {
+    const children = node2.getChildren(sf);
+    if (children.length > 0) {
+      for (const child of children) visit3(child);
+      return;
+    }
+    const start = node2.getFullStart();
+    const ranges = [...import_typescript3.default.getTrailingCommentRanges(sf.text, start) ?? [], ...import_typescript3.default.getLeadingCommentRanges(sf.text, start) ?? []];
+    for (const pos of new Set(ranges.map((r) => r.pos))) {
+      const r = ranges.find((x) => x.pos === pos);
+      const text = r === void 0 ? "" : sf.text.slice(r.pos, r.end);
+      if (CODE_COMMENT.test(text)) out.push(`${index}\0${text}`);
+    }
+    index++;
+  };
+  visit3(root);
+  return out;
+}
+function isCommentsOnlyChange(file2, base, head) {
+  if (!SCRIPT_FILE.test(file2)) return false;
+  const parse4 = (code2) => {
+    const { sourceFile, errors } = parseIsolated(file2, code2);
+    return errors.length > 0 ? null : sourceFile;
+  };
+  const before = parse4(base);
+  const after = parse4(head);
+  if (before === null || after === null || PRINTER.printFile(before) !== PRINTER.printFile(after)) return false;
+  return isDeepStrictEqual(codeComments(before, before), codeComments(after, after));
 }
 
 // src/classify/reach.ts
@@ -237471,6 +237552,190 @@ function computeRisk(input2) {
   });
   files.sort((a, b) => RANK2[a.level] - RANK2[b.level] || b.pagesReached - a.pagesReached || b.transitiveDependents - a.transitiveDependents || compareStrings(a.path, b.path));
   return { totalPages: pages.length, files };
+}
+
+// src/decls/impact.ts
+var DeclGraph = class {
+  constructor(out) {
+    this.out = out;
+    out.decls.forEach((d, i) => this.byId.set(d.id, i));
+    for (const [from, to] of out.edges) {
+      const list2 = this.reverse.get(to) ?? [];
+      list2.push(from);
+      this.reverse.set(to, list2);
+    }
+  }
+  out;
+  byId = /* @__PURE__ */ new Map();
+  reverse = /* @__PURE__ */ new Map();
+  decl(i) {
+    const d = this.out.decls[i];
+    if (d === void 0) throw new Error(`internal: Go declaration ${i} does not exist`);
+    return d;
+  }
+  /** Breadth-first over reversed edges: every declaration whose code can run the starting ones, with the next step back. */
+  reach(starts) {
+    const result = new Map(starts.map((s) => [s, { dist: 0, next: null }]));
+    let frontier = [...starts];
+    while (frontier.length > 0) {
+      const next = [];
+      for (const node2 of frontier) {
+        const dist = (result.get(node2)?.dist ?? 0) + 1;
+        for (const from of this.reverse.get(node2) ?? []) {
+          if (result.has(from)) continue;
+          result.set(from, { dist, next: node2 });
+          next.push(from);
+        }
+      }
+      frontier = next;
+    }
+    return result;
+  }
+  /** Entry points whose anchors reach the starting declarations, each with the file chain anchor → … → start. */
+  entriesReaching(starts, keys) {
+    const reach = this.reach(starts);
+    const out = /* @__PURE__ */ new Map();
+    for (const entry of this.out.entries) {
+      if (keys && !keys.has(entry.key)) continue;
+      let best;
+      for (const a of entry.anchors) {
+        const r = reach.get(a);
+        if (r && (best === void 0 || r.dist < (reach.get(best)?.dist ?? Infinity))) best = a;
+      }
+      if (best === void 0) continue;
+      const files = [];
+      for (let cur = best; cur !== null; cur = reach.get(cur)?.next ?? null) {
+        const file2 = this.decl(cur).file;
+        if (files[files.length - 1] !== file2) files.push(file2);
+      }
+      out.set(entry.key, files);
+    }
+    return out;
+  }
+  anchorIds(entry) {
+    return entry.anchors.map((a) => this.decl(a).id).sort(compareStrings).join("\n");
+  }
+};
+function declImportGraph(out) {
+  const seen = /* @__PURE__ */ new Set();
+  const edges = [];
+  for (const [from, to] of out.edges) {
+    const a = out.decls[from]?.file;
+    const b = out.decls[to]?.file;
+    if (a === void 0 || b === void 0 || a === b || seen.has(`${a}\0${b}`)) continue;
+    seen.add(`${a}\0${b}`);
+    edges.push({ from: a, to: b, kind: "static" });
+  }
+  edges.sort((x, y) => compareStrings(x.from, y.from) || compareStrings(x.to, y.to));
+  const parseErrors = out.problems.filter((p) => p.kind !== "dynamic-route").map((p) => ({ file: p.file, line: Math.max(1, p.line), message: p.detail }));
+  return { nodes: [...out.files].sort(compareStrings), edges, unresolved: [], parseErrors, reexportOnly: [] };
+}
+function declRouteTable(out) {
+  const routes = out.entries.map((e) => ({
+    key: e.key,
+    path: e.key,
+    index: false,
+    entry: e.file === "" ? null : e.file,
+    modules: sortedUnique(e.anchors.map((a) => out.decls[a]?.file ?? "").filter((f) => f !== "")),
+    layouts: [],
+    ...e.computed !== void 0 && e.computed.length > 0 ? { computed: e.computed.map((c) => ({ file: c.file, line: Math.max(1, c.line), detail: `${e.key}: path computed at run time` })) } : {}
+  }));
+  const dynamic = out.problems.filter((p) => p.kind === "dynamic-route").map((p) => ({ file: p.file, line: Math.max(1, p.line), detail: p.detail }));
+  return { routes: routes.sort((a, b) => compareStrings(a.key, b.key)), dynamic, sources: sortedUnique(out.entries.map((e) => e.file)) };
+}
+var isStartup = (id) => id.includes(".init#") || id.includes("._#");
+var HEADER_CHANGED = "imports or code directives changed";
+function headerChanged(before, after) {
+  if (before === void 0 || after === void 0) return before !== after;
+  const bound = (entries) => new Set(entries.filter((e) => e.startsWith("bind ")).map((e) => e.split(" ")[1] ?? ""));
+  const [boundBefore, boundAfter] = [bound(before), bound(after)];
+  const [setBefore, setAfter] = [new Set(before), new Set(after)];
+  const counts = (e, other) => !e.startsWith("bind ") || other.has(e.split(" ")[1] ?? "");
+  return before.some((e) => !setAfter.has(e) && counts(e, boundAfter)) || after.some((e) => !setBefore.has(e) && counts(e, boundBefore));
+}
+function declImpacts(base, head, files, isSource2, options = {}) {
+  const b = new DeclGraph(base);
+  const h = new DeclGraph(head);
+  const short = (id) => head.module !== "" && id.startsWith(`${head.module}/`) ? id.slice(head.module.length + 1) : id;
+  const baseKeys = options.existing ?? new Set(base.entries.map((e) => e.key));
+  const headKeys = new Set(head.entries.map((e) => e.key));
+  const existing = new Set([...headKeys].filter((k) => baseKeys.has(k)));
+  const added = new Set([...headKeys].filter((k) => !baseKeys.has(k)));
+  const result = /* @__PURE__ */ new Map();
+  for (const file2 of files) {
+    if (!isSource2(file2.path)) continue;
+    const oldPath = file2.oldPath ?? file2.path;
+    const impact = { additive: true, problems: [], affected: /* @__PURE__ */ new Map(), addedOperations: [], added: [], chains: /* @__PURE__ */ new Map(), newEntriesReaching: [] };
+    const hit = (reached, cause) => {
+      for (const [key, chain] of reached) {
+        if (impact.affected.has(key)) continue;
+        impact.affected.set(key, cause);
+        impact.chains.set(key, chain);
+      }
+    };
+    const headHere = file2.status === "deleted" ? [] : head.decls.map((d, i) => [d, i]).filter(([d]) => d.file === file2.path);
+    const baseHere = file2.status === "added" ? [] : base.decls.map((d, i) => [d, i]).filter(([d]) => d.file === oldPath);
+    if (file2.status === "added") {
+      const starts = headHere.map(([, i]) => i);
+      hit(h.entriesReaching(starts, existing), file2.path);
+      impact.newEntriesReaching = [...h.entriesReaching(starts, added).keys()].sort(compareStrings);
+      impact.added = headHere.map(([d]) => short(d.id)).sort(compareStrings);
+    }
+    for (const [d, i] of file2.status === "added" ? [] : headHere) {
+      const before = b.byId.get(d.id);
+      if (before === void 0 && !isStartup(d.id)) {
+        impact.added.push(short(d.id));
+        continue;
+      }
+      if (before !== void 0 && b.decl(before).core === d.core) continue;
+      if (options.erasedTypes === true && d.kind === "type") {
+        impact.erased = [...impact.erased ?? [], short(d.id)];
+        continue;
+      }
+      impact.problems.push(`${d.kind} ${short(d.id)} ${before === void 0 ? "added (runs at startup)" : "changed"}`);
+      hit(h.entriesReaching([i], existing), short(d.id));
+    }
+    for (const [d, i] of baseHere) {
+      if (h.byId.has(d.id) || options.erasedTypes === true && d.kind === "type") continue;
+      impact.problems.push(`${d.kind} ${short(d.id)} was removed`);
+      hit(b.entriesReaching([i], existing), short(d.id));
+    }
+    if (file2.status !== "added" && file2.status !== "deleted" && headerChanged(base.headers?.[oldPath], head.headers?.[file2.path])) {
+      impact.problems.push(HEADER_CHANGED);
+      hit(h.entriesReaching(headHere.map(([, i]) => i), existing), file2.path);
+    }
+    for (const entry of head.entries) {
+      if (entry.file !== file2.path) continue;
+      if (added.has(entry.key)) {
+        impact.addedOperations.push(entry.key);
+        continue;
+      }
+      const before = options.existing ? void 0 : base.entries.find((e) => e.key === entry.key);
+      if (before && (b.anchorIds(before) !== h.anchorIds(entry) || before.inline !== entry.inline) && !impact.affected.has(entry.key)) {
+        impact.problems.push(`entry point ${entry.key} now runs different code (handler or middlewares)`);
+        impact.affected.set(entry.key, "registration");
+        impact.chains.set(entry.key, [file2.path]);
+      }
+    }
+    for (const entry of options.existing ? [] : base.entries) if (entry.file === oldPath && !headKeys.has(entry.key)) impact.problems.push(`entry point ${entry.key} was removed`);
+    result.set(file2.path, impact);
+  }
+  const reportedRemoved = new Set((options.existing ? [] : base.entries).filter((e) => !headKeys.has(e.key) && result.has(e.file)).map((e) => e.key));
+  const orphans = (options.existing ? [] : base.entries).filter((e) => !headKeys.has(e.key) && !reportedRemoved.has(e.key)).map((e) => e.key);
+  if (orphans.length > 0) {
+    const registrationChanged = [...result.keys()].filter((path3) => head.decls.some((d) => d.file === path3 && d.hash !== d.core && b.byId.has(d.id) && b.decl(b.byId.get(d.id) ?? -1).hash !== d.hash));
+    for (const path3 of registrationChanged.length > 0 ? registrationChanged : [...result.keys()]) {
+      const impact = result.get(path3);
+      for (const key of orphans) impact?.problems.push(`entry point ${key} was removed`);
+    }
+  }
+  for (const impact of result.values()) {
+    impact.additive = impact.problems.length === 0;
+    impact.added = sortedUnique(impact.added);
+    impact.addedOperations = sortedUnique(impact.addedOperations);
+    impact.affected = new Map([...impact.affected.entries()].sort(([x], [y]) => compareStrings(x, y)));
+  }
+  return result;
 }
 
 // src/classify/dependencies.ts
@@ -237743,7 +238008,16 @@ function classify(input2) {
       reachTargets.push({ path: file2.path, reportModified: false });
       continue;
     }
-    const declImpact = role === "source" ? impactOf(file2.path) : void 0;
+    if (input2.commentsOnlyFiles?.has(file2.path)) {
+      out.additive = true;
+      out.commentsOnly = true;
+      reasons.push(reason("declarations-additive", "only comments or formatting changed", file2.path));
+      continue;
+    }
+    const sourceImpact = role === "source" ? impactOf(file2.path) : void 0;
+    const nothingDeclared = sourceImpact !== void 0 && sourceImpact.additive && sourceImpact.addedOperations.length === 0 && sourceImpact.added.length === 0 && (sourceImpact.erased?.length ?? 0) === 0;
+    const headerChanged2 = sourceImpact?.problems.includes(HEADER_CHANGED) === true;
+    const declImpact = (nothingDeclared || headerChanged2) && isScriptFile(file2.path) ? void 0 : sourceImpact;
     if (declImpact) {
       out.additive = declImpact.additive;
       if (declImpact.additive) {
@@ -237753,6 +238027,7 @@ function classify(input2) {
           ...declImpact.added.length > 0 ? [`new declarations ${list2(declImpact.added)}`] : [],
           ...declImpact.erased && declImpact.erased.length > 0 ? [`types changed (erased at runtime) ${list2(declImpact.erased)}`] : []
         ];
+        if (parts.length === 0) out.commentsOnly = true;
         reasons.push(reason("declarations-additive", parts.length > 0 ? `only additions: ${parts.join("; ")}` : "only comments or formatting changed", file2.path));
       } else {
         const removedEntries = declImpact.problems.filter((p) => p.startsWith("entry point ") && p.endsWith(" was removed"));
@@ -238152,7 +238427,9 @@ var FileSchema = external_exports.object({
   linesAdded: count,
   linesRemoved: count,
   /** Added TypeScript/JavaScript files that only declare things (types, re-exports, static constants): no logic of their own. */
-  declarationsOnly: external_exports.literal(true).optional()
+  declarationsOnly: external_exports.literal(true).optional(),
+  /** Modified files whose code is the same in both versions: only comments or formatting changed (no risk). */
+  commentsOnly: external_exports.literal(true).optional()
 }).strict();
 var RangeSchema = external_exports.object({ start: line, end: line }).strict();
 var CoverageSignalSchema = external_exports.object({
@@ -238455,7 +238732,7 @@ function createTreeFileSystem(options) {
 }
 
 // src/project/resolve.ts
-var import_typescript3 = __toESM(require_typescript(), 1);
+var import_typescript4 = __toESM(require_typescript(), 1);
 import { posix as posix4 } from "path";
 function createResolverContext(input2) {
   const fs2 = input2.fs;
@@ -238473,7 +238750,7 @@ function createResolverContext(input2) {
     options: input2.options,
     configPath: input2.configPath,
     resolutionHost,
-    resolutionCache: import_typescript3.default.createModuleResolutionCache(input2.projectDir, (f) => f, input2.options)
+    resolutionCache: import_typescript4.default.createModuleResolutionCache(input2.projectDir, (f) => f, input2.options)
   };
 }
 var TS_LIKE = /* @__PURE__ */ new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".json", ""]);
@@ -238531,7 +238808,7 @@ function isInRepo(file2, repoRoot2) {
 }
 function resolveSpecifier(project, repoRoot2, containingFile, specifier, mode) {
   const cleaned = specifier.split("?")[0]?.split("#")[0] ?? specifier;
-  const result = import_typescript3.default.resolveModuleName(cleaned, containingFile, project.options, project.resolutionHost, project.resolutionCache, void 0, mode);
+  const result = import_typescript4.default.resolveModuleName(cleaned, containingFile, project.options, project.resolutionHost, project.resolutionCache, void 0, mode);
   const resolved = result.resolvedModule;
   if (resolved) {
     const file2 = toPosix(project.fs.realpath(resolved.resolvedFileName));
@@ -238887,51 +239164,6 @@ function parseGovulncheckReport(text) {
     if (!current || (rank[advisory.severity] ?? 9) < (rank[current.severity] ?? 9)) best.set(key, advisory);
   }
   return { advisories: [...best.values()].sort((a, b) => compareStrings(a.id, b.id) || compareStrings(a.package, b.package)), dependsOn: /* @__PURE__ */ new Map() };
-}
-
-// src/classify/declarations-only.ts
-var import_typescript4 = __toESM(require_typescript(), 1);
-var SCRIPT = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
-var isScriptFile = (file2) => SCRIPT.test(file2);
-function isStaticValue(e, depth = 0, calls = true) {
-  if (depth > 20) return false;
-  const value = (x) => isStaticValue(x, depth + 1, calls);
-  if (import_typescript4.default.isArrowFunction(e)) return !import_typescript4.default.isBlock(e.body) && value(e.body);
-  if (import_typescript4.default.isCallExpression(e)) return calls && (import_typescript4.default.isIdentifier(e.expression) || import_typescript4.default.isPropertyAccessExpression(e.expression)) && value(e.expression) && e.arguments.length > 0 && e.arguments.every((a) => !import_typescript4.default.isSpreadElement(a) && isStaticValue(a, depth + 1, false));
-  if (import_typescript4.default.isStringLiteral(e) || import_typescript4.default.isNumericLiteral(e) || import_typescript4.default.isNoSubstitutionTemplateLiteral(e) || import_typescript4.default.isBigIntLiteral(e) || import_typescript4.default.isRegularExpressionLiteral(e)) return true;
-  if (e.kind === import_typescript4.default.SyntaxKind.TrueKeyword || e.kind === import_typescript4.default.SyntaxKind.FalseKeyword || e.kind === import_typescript4.default.SyntaxKind.NullKeyword) return true;
-  if (import_typescript4.default.isIdentifier(e) || import_typescript4.default.isPropertyAccessExpression(e)) return import_typescript4.default.isIdentifier(e) || value(e.expression);
-  if (import_typescript4.default.isPrefixUnaryExpression(e)) return (e.operator === import_typescript4.default.SyntaxKind.MinusToken || e.operator === import_typescript4.default.SyntaxKind.PlusToken) && value(e.operand);
-  if (import_typescript4.default.isParenthesizedExpression(e) || import_typescript4.default.isAsExpression(e) || import_typescript4.default.isSatisfiesExpression(e) || import_typescript4.default.isTypeAssertionExpression(e)) return value(e.expression);
-  if (import_typescript4.default.isTemplateExpression(e)) return e.templateSpans.every((s) => value(s.expression));
-  if (import_typescript4.default.isArrayLiteralExpression(e)) return e.elements.every((x) => import_typescript4.default.isSpreadElement(x) ? value(x.expression) : value(x));
-  if (import_typescript4.default.isObjectLiteralExpression(e)) {
-    return e.properties.every((p) => {
-      if (import_typescript4.default.isPropertyAssignment(p)) return (!import_typescript4.default.isComputedPropertyName(p.name) || value(p.name.expression)) && value(p.initializer);
-      if (import_typescript4.default.isShorthandPropertyAssignment(p)) return true;
-      if (import_typescript4.default.isSpreadAssignment(p)) return value(p.expression);
-      return false;
-    });
-  }
-  return false;
-}
-function isDeclarationsOnlyModule(file2, code2) {
-  if (!SCRIPT.test(file2) || file2.endsWith(".test.ts")) return false;
-  const { sourceFile: sf, errors } = parseIsolated(file2, code2);
-  if (errors.length > 0) return false;
-  return sf.statements.every((s) => {
-    if (import_typescript4.default.isInterfaceDeclaration(s) || import_typescript4.default.isTypeAliasDeclaration(s) || import_typescript4.default.isEnumDeclaration(s)) return true;
-    if (import_typescript4.default.isImportDeclaration(s)) return s.importClause !== void 0;
-    if (import_typescript4.default.isExportDeclaration(s)) return true;
-    if (import_typescript4.default.isExportAssignment(s)) return isStaticValue(s.expression);
-    const modifiers = import_typescript4.default.canHaveModifiers(s) ? import_typescript4.default.getModifiers(s) ?? [] : [];
-    if (modifiers.some((m) => m.kind === import_typescript4.default.SyntaxKind.DeclareKeyword)) return true;
-    if (import_typescript4.default.isVariableStatement(s)) {
-      const isConst = (s.declarationList.flags & import_typescript4.default.NodeFlags.Const) !== 0;
-      return isConst && s.declarationList.declarations.every((d) => d.initializer !== void 0 && import_typescript4.default.isIdentifier(d.name) && isStaticValue(d.initializer));
-    }
-    return false;
-  });
 }
 
 // src/signals/audit.ts
@@ -249048,177 +249280,6 @@ import { homedir, tmpdir } from "os";
 import { dirname as dirname2, join as join3 } from "path";
 import { fileURLToPath } from "url";
 
-// src/decls/impact.ts
-var DeclGraph = class {
-  constructor(out) {
-    this.out = out;
-    out.decls.forEach((d, i) => this.byId.set(d.id, i));
-    for (const [from, to] of out.edges) {
-      const list2 = this.reverse.get(to) ?? [];
-      list2.push(from);
-      this.reverse.set(to, list2);
-    }
-  }
-  out;
-  byId = /* @__PURE__ */ new Map();
-  reverse = /* @__PURE__ */ new Map();
-  decl(i) {
-    const d = this.out.decls[i];
-    if (d === void 0) throw new Error(`internal: Go declaration ${i} does not exist`);
-    return d;
-  }
-  /** Breadth-first over reversed edges: every declaration whose code can run the starting ones, with the next step back. */
-  reach(starts) {
-    const result = new Map(starts.map((s) => [s, { dist: 0, next: null }]));
-    let frontier = [...starts];
-    while (frontier.length > 0) {
-      const next = [];
-      for (const node2 of frontier) {
-        const dist = (result.get(node2)?.dist ?? 0) + 1;
-        for (const from of this.reverse.get(node2) ?? []) {
-          if (result.has(from)) continue;
-          result.set(from, { dist, next: node2 });
-          next.push(from);
-        }
-      }
-      frontier = next;
-    }
-    return result;
-  }
-  /** Entry points whose anchors reach the starting declarations, each with the file chain anchor → … → start. */
-  entriesReaching(starts, keys) {
-    const reach = this.reach(starts);
-    const out = /* @__PURE__ */ new Map();
-    for (const entry of this.out.entries) {
-      if (keys && !keys.has(entry.key)) continue;
-      let best;
-      for (const a of entry.anchors) {
-        const r = reach.get(a);
-        if (r && (best === void 0 || r.dist < (reach.get(best)?.dist ?? Infinity))) best = a;
-      }
-      if (best === void 0) continue;
-      const files = [];
-      for (let cur = best; cur !== null; cur = reach.get(cur)?.next ?? null) {
-        const file2 = this.decl(cur).file;
-        if (files[files.length - 1] !== file2) files.push(file2);
-      }
-      out.set(entry.key, files);
-    }
-    return out;
-  }
-  anchorIds(entry) {
-    return entry.anchors.map((a) => this.decl(a).id).sort(compareStrings).join("\n");
-  }
-};
-function declImportGraph(out) {
-  const seen = /* @__PURE__ */ new Set();
-  const edges = [];
-  for (const [from, to] of out.edges) {
-    const a = out.decls[from]?.file;
-    const b = out.decls[to]?.file;
-    if (a === void 0 || b === void 0 || a === b || seen.has(`${a}\0${b}`)) continue;
-    seen.add(`${a}\0${b}`);
-    edges.push({ from: a, to: b, kind: "static" });
-  }
-  edges.sort((x, y) => compareStrings(x.from, y.from) || compareStrings(x.to, y.to));
-  const parseErrors = out.problems.filter((p) => p.kind !== "dynamic-route").map((p) => ({ file: p.file, line: Math.max(1, p.line), message: p.detail }));
-  return { nodes: [...out.files].sort(compareStrings), edges, unresolved: [], parseErrors, reexportOnly: [] };
-}
-function declRouteTable(out) {
-  const routes = out.entries.map((e) => ({
-    key: e.key,
-    path: e.key,
-    index: false,
-    entry: e.file === "" ? null : e.file,
-    modules: sortedUnique(e.anchors.map((a) => out.decls[a]?.file ?? "").filter((f) => f !== "")),
-    layouts: [],
-    ...e.computed !== void 0 && e.computed.length > 0 ? { computed: e.computed.map((c) => ({ file: c.file, line: Math.max(1, c.line), detail: `${e.key}: path computed at run time` })) } : {}
-  }));
-  const dynamic = out.problems.filter((p) => p.kind === "dynamic-route").map((p) => ({ file: p.file, line: Math.max(1, p.line), detail: p.detail }));
-  return { routes: routes.sort((a, b) => compareStrings(a.key, b.key)), dynamic, sources: sortedUnique(out.entries.map((e) => e.file)) };
-}
-var isStartup = (id) => id.includes(".init#") || id.includes("._#");
-function declImpacts(base, head, files, isSource2, options = {}) {
-  const b = new DeclGraph(base);
-  const h = new DeclGraph(head);
-  const short = (id) => head.module !== "" && id.startsWith(`${head.module}/`) ? id.slice(head.module.length + 1) : id;
-  const baseKeys = options.existing ?? new Set(base.entries.map((e) => e.key));
-  const headKeys = new Set(head.entries.map((e) => e.key));
-  const existing = new Set([...headKeys].filter((k) => baseKeys.has(k)));
-  const added = new Set([...headKeys].filter((k) => !baseKeys.has(k)));
-  const result = /* @__PURE__ */ new Map();
-  for (const file2 of files) {
-    if (!isSource2(file2.path)) continue;
-    const oldPath = file2.oldPath ?? file2.path;
-    const impact = { additive: true, problems: [], affected: /* @__PURE__ */ new Map(), addedOperations: [], added: [], chains: /* @__PURE__ */ new Map(), newEntriesReaching: [] };
-    const hit = (reached, cause) => {
-      for (const [key, chain] of reached) {
-        if (impact.affected.has(key)) continue;
-        impact.affected.set(key, cause);
-        impact.chains.set(key, chain);
-      }
-    };
-    const headHere = file2.status === "deleted" ? [] : head.decls.map((d, i) => [d, i]).filter(([d]) => d.file === file2.path);
-    const baseHere = file2.status === "added" ? [] : base.decls.map((d, i) => [d, i]).filter(([d]) => d.file === oldPath);
-    if (file2.status === "added") {
-      const starts = headHere.map(([, i]) => i);
-      hit(h.entriesReaching(starts, existing), file2.path);
-      impact.newEntriesReaching = [...h.entriesReaching(starts, added).keys()].sort(compareStrings);
-      impact.added = headHere.map(([d]) => short(d.id)).sort(compareStrings);
-    }
-    for (const [d, i] of file2.status === "added" ? [] : headHere) {
-      const before = b.byId.get(d.id);
-      if (before === void 0 && !isStartup(d.id)) {
-        impact.added.push(short(d.id));
-        continue;
-      }
-      if (before !== void 0 && b.decl(before).core === d.core) continue;
-      if (options.erasedTypes === true && d.kind === "type") {
-        impact.erased = [...impact.erased ?? [], short(d.id)];
-        continue;
-      }
-      impact.problems.push(`${d.kind} ${short(d.id)} ${before === void 0 ? "added (runs at startup)" : "changed"}`);
-      hit(h.entriesReaching([i], existing), short(d.id));
-    }
-    for (const [d, i] of baseHere) {
-      if (h.byId.has(d.id) || options.erasedTypes === true && d.kind === "type") continue;
-      impact.problems.push(`${d.kind} ${short(d.id)} was removed`);
-      hit(b.entriesReaching([i], existing), short(d.id));
-    }
-    for (const entry of head.entries) {
-      if (entry.file !== file2.path) continue;
-      if (added.has(entry.key)) {
-        impact.addedOperations.push(entry.key);
-        continue;
-      }
-      const before = options.existing ? void 0 : base.entries.find((e) => e.key === entry.key);
-      if (before && (b.anchorIds(before) !== h.anchorIds(entry) || before.inline !== entry.inline) && !impact.affected.has(entry.key)) {
-        impact.problems.push(`entry point ${entry.key} now runs different code (handler or middlewares)`);
-        impact.affected.set(entry.key, "registration");
-        impact.chains.set(entry.key, [file2.path]);
-      }
-    }
-    for (const entry of options.existing ? [] : base.entries) if (entry.file === oldPath && !headKeys.has(entry.key)) impact.problems.push(`entry point ${entry.key} was removed`);
-    result.set(file2.path, impact);
-  }
-  const reportedRemoved = new Set((options.existing ? [] : base.entries).filter((e) => !headKeys.has(e.key) && result.has(e.file)).map((e) => e.key));
-  const orphans = (options.existing ? [] : base.entries).filter((e) => !headKeys.has(e.key) && !reportedRemoved.has(e.key)).map((e) => e.key);
-  if (orphans.length > 0) {
-    const registrationChanged = [...result.keys()].filter((path3) => head.decls.some((d) => d.file === path3 && d.hash !== d.core && b.byId.has(d.id) && b.decl(b.byId.get(d.id) ?? -1).hash !== d.hash));
-    for (const path3 of registrationChanged.length > 0 ? registrationChanged : [...result.keys()]) {
-      const impact = result.get(path3);
-      for (const key of orphans) impact?.problems.push(`entry point ${key} was removed`);
-    }
-  }
-  for (const impact of result.values()) {
-    impact.additive = impact.problems.length === 0;
-    impact.added = sortedUnique(impact.added);
-    impact.addedOperations = sortedUnique(impact.addedOperations);
-    impact.affected = new Map([...impact.affected.entries()].sort(([x], [y]) => compareStrings(x, y)));
-  }
-  return result;
-}
-
 // src/decls/types.ts
 var line2 = external_exports.number().int().nonnegative();
 var DeclHelperSchema = external_exports.object({
@@ -249247,7 +249308,12 @@ var DeclHelperSchema = external_exports.object({
     })
   ),
   problems: external_exports.array(external_exports.object({ file: external_exports.string(), line: line2, kind: external_exports.enum(["type-error", "parse-error", "dynamic-route"]), detail: external_exports.string() })),
-  comments: external_exports.array(external_exports.object({ file: external_exports.string(), line: line2, text: external_exports.string() }))
+  comments: external_exports.array(external_exports.object({ file: external_exports.string(), line: line2, text: external_exports.string() })),
+  /**
+   * Per file, what declaration hashes leave out, as sorted entries: "bind <name> <source…>" for each name an import
+   * binds, "effect …" for side-effect and re-export imports, compiler directives and comments that change emitted code.
+   */
+  headers: external_exports.record(external_exports.string(), external_exports.array(external_exports.string())).optional()
 });
 
 // src/cli/lang-workspace.ts
@@ -251356,7 +251422,7 @@ function moduleDecls(sf) {
   const out = [];
   const code2 = [];
   for (const s of sf.statements) {
-    if (import_typescript21.default.isImportDeclaration(s) || import_typescript21.default.isImportEqualsDeclaration(s) || import_typescript21.default.isExportDeclaration(s) && s.moduleSpecifier !== void 0) continue;
+    if (isImportLike(s)) continue;
     if (import_typescript21.default.isFunctionDeclaration(s)) out.push({ name: s.name?.text ?? "default", kind: "func", node: s });
     else if (import_typescript21.default.isClassDeclaration(s)) {
       const cls = s.name?.text ?? "default";
@@ -251398,6 +251464,37 @@ function toDecl(sf, file2, d) {
   const hash2 = declHash(sf, d);
   return { id: `${file2}#${d.name}`, file: file2, line: start, end, kind: d.kind, hash: hash2, core: hash2 };
 }
+var isImportLike = (s) => import_typescript21.default.isImportDeclaration(s) || import_typescript21.default.isImportEqualsDeclaration(s) || import_typescript21.default.isExportDeclaration(s) && s.moduleSpecifier !== void 0;
+function fileHeader(sf) {
+  const out = [];
+  for (const s of sf.statements) {
+    if (import_typescript21.default.isImportDeclaration(s) && import_typescript21.default.isStringLiteral(s.moduleSpecifier)) {
+      const from = s.moduleSpecifier.text;
+      const clause = s.importClause;
+      if (clause === void 0) out.push(`effect import ${from}`);
+      else if (clause.phaseModifier !== import_typescript21.default.SyntaxKind.TypeKeyword) {
+        if (clause.name) out.push(`bind ${clause.name.text} ${from} default`);
+        const bindings = clause.namedBindings;
+        if (bindings && import_typescript21.default.isNamespaceImport(bindings)) out.push(`bind ${bindings.name.text} ${from} *`);
+        else for (const e of bindings?.elements ?? []) if (!e.isTypeOnly) out.push(`bind ${e.name.text} ${from} ${(e.propertyName ?? e.name).text}`);
+      }
+    } else if (import_typescript21.default.isImportEqualsDeclaration(s)) {
+      if (!s.isTypeOnly) out.push(`bind ${s.name.text} ${tokenHash(sf, s.moduleReference)}`);
+    } else if (import_typescript21.default.isExportDeclaration(s) && s.moduleSpecifier !== void 0 && import_typescript21.default.isStringLiteral(s.moduleSpecifier)) {
+      const from = s.moduleSpecifier.text;
+      const clause = s.exportClause;
+      if (s.isTypeOnly) continue;
+      if (clause === void 0) out.push(`effect export * from ${from}`);
+      else if (import_typescript21.default.isNamespaceExport(clause)) out.push(`effect export * as ${clause.name.text} from ${from}`);
+      else for (const e of clause.elements) if (!e.isTypeOnly) out.push(`effect export ${(e.propertyName ?? e.name).text} as ${e.name.text} from ${from}`);
+    } else if (isImportLike(s)) out.push(`effect ${tokenHash(sf, s)}`);
+    for (const c of codeComments(s, sf)) out.push(`effect comment ${tokenHash(sf, s)} ${c}`);
+  }
+  return out.sort(compareStrings);
+}
+function baseHeader(file2, code2) {
+  return fileHeader(parseIsolated(file2, code2).sourceFile);
+}
 function baseDecls(file2, code2) {
   const { sourceFile: sf } = parseIsolated(file2, code2);
   return moduleDecls(sf).map((d) => toDecl(sf, file2, d));
@@ -251411,10 +251508,12 @@ function tsDeclGraph(input2) {
   const nodes = [];
   const byNode = /* @__PURE__ */ new Map();
   const files = [];
+  const headers = {};
   for (const sf of input2.project.program.getSourceFiles()) {
     if (sf.isDeclarationFile || !isProject(sf.fileName)) continue;
     const file2 = rel(sf.fileName);
     files.push(file2);
+    headers[file2] = fileHeader(sf);
     const classIndex = /* @__PURE__ */ new Map();
     for (const d of moduleDecls(sf)) {
       byNode.set(d.node, decls.length);
@@ -251486,7 +251585,8 @@ function tsDeclGraph(input2) {
     edges: [...edges].map((e) => e.split(",").map(Number)),
     entries,
     problems: [],
-    comments: []
+    comments: [],
+    headers
   };
 }
 
@@ -251646,21 +251746,23 @@ async function runAnalyze(ctx, options, deps) {
         baseRoutes = routesBase === void 0 ? null : await baseRouteTable(ctx, ws, mb, routesBase);
       }
       const manifests = await manifestDiffs(ctx, files, roleOf, mb, meta3.head.sha);
-      const tsModified = files.filter((f) => f.status === "modified" && roleOf(f.path) === "source" && /\.(ts|tsx|mts|cts)$/.test(f.path)).map((f) => f.path);
-      const tsBase = await readFiles(ctx.repoRoot, mb, tsModified);
-      const tsHead = await readFiles(ctx.repoRoot, meta3.head.sha, tsModified);
+      const scriptModified = files.filter((f) => f.status === "modified" && ["source", "resolvers", "routes", "barrel"].includes(roleOf(f.path)) && /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(f.path)).map((f) => f.path);
+      const tsBase = await readFiles(ctx.repoRoot, mb, scriptModified);
+      const tsHead = await readFiles(ctx.repoRoot, meta3.head.sha, scriptModified);
+      const commentsOnlyFiles = new Set(scriptModified.filter((p) => isCommentsOnlyChange(p, tsBase.get(p) ?? "", tsHead.get(p) ?? "x(")));
+      const tsModified = scriptModified.filter((p) => roleOf(p) === "source" && /\.(ts|tsx|mts|cts)$/.test(p) && !commentsOnlyFiles.has(p));
       const typeOnlyFiles = new Set(tsModified.filter((p) => isTypeOnlyModule(p, tsBase.get(p) ?? "x") && isTypeOnlyModule(p, tsHead.get(p) ?? "x")));
-      const declChanged = ws.backend ? [] : files.filter((f) => f.status !== "renamed" && roleOf(f.path) === "source" && /\.(ts|tsx|mts|cts)$/.test(f.path) && !typeOnlyFiles.has(f.path));
+      const declChanged = ws.backend ? [] : files.filter((f) => f.status !== "renamed" && roleOf(f.path) === "source" && /\.(ts|tsx|mts|cts)$/.test(f.path) && !typeOnlyFiles.has(f.path) && !commentsOnlyFiles.has(f.path));
       const declBaseText = await readFiles(ctx.repoRoot, mb, declChanged.filter((f) => f.status !== "added").map((f) => f.oldPath ?? f.path));
-      const head = declChanged.length === 0 ? { module: "", files: [], decls: [], edges: [], entries: [], problems: [], comments: [] } : tsDeclGraph({ project: ws.project, repoRoot: toPosix(ctx.repoRoot), isOrigin: (p) => {
+      const head = declChanged.length === 0 ? { module: "", files: [], decls: [], edges: [], entries: [], problems: [], comments: [], headers: {} } : tsDeclGraph({ project: ws.project, repoRoot: toPosix(ctx.repoRoot), isOrigin: (p) => {
         const r = roleOf(p);
         return r !== "test" && r !== "story" && r !== "excluded" && r !== "outside";
       }, routes: ws.routes });
-      const baseOut = { module: "", files: [], decls: [...declBaseText].flatMap(([p, code2]) => baseDecls(p, code2)), edges: [], entries: [], problems: [], comments: [] };
+      const baseOut = { module: "", files: [], decls: [...declBaseText].flatMap(([p, code2]) => baseDecls(p, code2)), edges: [], entries: [], problems: [], comments: [], headers: Object.fromEntries([...declBaseText].map(([p, code2]) => [p, baseHeader(p, code2)])) };
       const existing = new Set((baseRoutes ?? ws.routes).routes.map((r) => r.key));
       const declImpactMap = declImpacts(baseOut, head, declChanged, () => true, { existing, erasedTypes: true });
       lap("base");
-      result = classify({ files, roleOf, manifests, typeOnlyFiles, declImpacts: declImpactMap, ...backend ? { backend: { impacts: backend.impacts } } : {}, graph: ws.graph, routesFile: ws.routesFile, ...ws.routesFromDirectory ? { routesFromDirectory: true } : {}, headRoutes: ws.routes, baseRoutes, baseText, headText });
+      result = classify({ files, roleOf, manifests, typeOnlyFiles, commentsOnlyFiles, declImpacts: declImpactMap, ...backend ? { backend: { impacts: backend.impacts } } : {}, graph: ws.graph, routesFile: ws.routesFile, ...ws.routesFromDirectory ? { routesFromDirectory: true } : {}, headRoutes: ws.routes, baseRoutes, baseText, headText });
     }
     for (const f of result.files) if (f.status === "added" && (f.role === "source" || f.role === "barrel") && isScriptFile(f.path) && isDeclarationsOnlyModule(f.path, readHead(f.path) ?? "x(")) f.declarationsOnly = true;
     lap("classify");
@@ -251774,9 +251876,10 @@ function scoreItems(o) {
   const coverage = fileCoverage(o);
   const coverageNote = o.signals.coverage.status === "ok" ? "not measured" : "coverage not verified";
   const declarationsOnly = new Set(o.files.filter((f) => f.declarationsOnly === true).map((f) => f.path));
+  const commentsOnly = new Set(o.files.filter((f) => f.commentsOnly === true).map((f) => f.path));
   const declarationWeight = Math.min(DECLARATIONS_FILE_WEIGHT, 1 - (1 - DECLARATIONS_TOTAL_WEIGHT) ** (1 / Math.max(1, declarationsOnly.size)));
   for (const f of o.risk.files) {
-    if (!isCode(f.path)) continue;
+    if (!isCode(f.path) || commentsOnly.has(f.path)) continue;
     if (declarationsOnly.has(f.path)) {
       add(f.path, "change", declarationWeight, `added \xB7 only declarations (types, re-exports, static constants): no logic of its own`);
       continue;
@@ -252394,7 +252497,7 @@ var REASON_TEXT = {
   "new-file-reached-by-existing-route": "new file reached by an existing route",
   "tests-modified": "existing test modified",
   "type-only-change": "types-only file changed (erased at runtime)",
-  "declarations-additive": "only new declarations, comments or formatting (Go)",
+  "declarations-additive": "only new declarations, comments or formatting",
   "dependency-changed": "dependency change (not critical)",
   "lockfile-changed": "lockfile changed with the manifests",
   "route-added": "new route",

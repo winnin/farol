@@ -5,12 +5,14 @@ import type { AddedRoute, AffectedRoute, Dependencies, OutputFile, UnresolvedImp
 import type { ImportGraph, ParseError } from '../project/graph.js'
 import { KEY_SEPARATOR } from '../routes/paths.js'
 import type { DynamicRoute, RouteEntry, RouteTable } from '../routes/types.js'
+import { isScriptFile } from './declarations-only.js'
 import { checkBarrelAdditive, checkI18nAdditive, compareRouteTables, JsonParseError, unexplainedRemovedLines } from './additive.js'
 import { createReachIndex, reachFrom, routesReaching, type ReachIndex } from './reach.js'
 import { classificationFrom, reason, REASONS, sortReasons, type Classification, type Reason } from './reasons.js'
 import type { AnalysisRole } from './roles.js'
 import { computeRisk, type FileRisk } from './risk.js'
 import type { BackendFileImpact } from '../backend/impact.js'
+import { HEADER_CHANGED } from '../decls/impact.js'
 import { describeChange, sortChanges, type ManifestDiff } from './dependencies.js'
 
 export interface ClassifyInput {
@@ -36,6 +38,8 @@ export interface ClassifyInput {
   baseText: ReadonlyMap<string, string>
   /** Head contents of modified routes, barrel and i18n files. */
   headText: ReadonlyMap<string, string>
+  /** Modified JS/TS source files whose code is the same in both versions: only comments or formatting changed. */
+  commentsOnlyFiles?: ReadonlySet<string>
 }
 
 export interface ClassifyResult {
@@ -232,8 +236,19 @@ export function classify(input: ClassifyInput): ClassifyResult {
       reachTargets.push({ path: file.path, reportModified: false })
       continue
     }
+    if (input.commentsOnlyFiles?.has(file.path)) {
+      out.additive = true
+      out.commentsOnly = true
+      reasons.push(reason('declarations-additive', 'only comments or formatting changed', file.path))
+      continue
+    }
     // Modified existing file: only routes, barrel and i18n files can be additive.
-    const declImpact = role === 'source' ? impactOf(file.path) : undefined
+    const sourceImpact = role === 'source' ? impactOf(file.path) : undefined
+    // JS/TS: only the printer check above proves comments-only, and a change to imports, re-exports or code comments
+    // is outside every declaration. Such a file is read whole (file-level reach follows re-exports too).
+    const nothingDeclared = sourceImpact !== undefined && sourceImpact.additive && sourceImpact.addedOperations.length === 0 && sourceImpact.added.length === 0 && (sourceImpact.erased?.length ?? 0) === 0
+    const headerChanged = sourceImpact?.problems.includes(HEADER_CHANGED) === true
+    const declImpact = (nothingDeclared || headerChanged) && isScriptFile(file.path) ? undefined : sourceImpact
     if (declImpact) {
       // Declaration-level impact (Go): only changed or removed declarations count, with the entry points they reach.
       out.additive = declImpact.additive
@@ -244,6 +259,7 @@ export function classify(input: ClassifyInput): ClassifyResult {
           ...(declImpact.added.length > 0 ? [`new declarations ${list(declImpact.added)}`] : []),
           ...(declImpact.erased && declImpact.erased.length > 0 ? [`types changed (erased at runtime) ${list(declImpact.erased)}`] : []),
         ]
+        if (parts.length === 0) out.commentsOnly = true
         reasons.push(reason('declarations-additive', parts.length > 0 ? `only additions: ${parts.join('; ')}` : 'only comments or formatting changed', file.path))
       }
       else {

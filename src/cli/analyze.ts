@@ -21,11 +21,11 @@ import { UsageError } from '../config/load.js'
 import { EXIT_FAILURE, EXIT_OK, writeStdout } from './run.js'
 import { createAnalysisRoleOf, createIgnoreOf, extractRoutes, filesUnder, loadWorkspace, SOURCE_EXTENSIONS, type Workspace } from './workspace.js'
 import { diffManifest, ManifestParseError, type ManifestDiff } from '../classify/dependencies.js'
-import { isTypeOnlyModule } from '../classify/additive.js'
+import { isCommentsOnlyChange, isTypeOnlyModule } from '../classify/additive.js'
 import { isDeclarationsOnlyModule, isScriptFile } from '../classify/declarations-only.js'
 import { contractsSection, helperContractChanges } from '../contracts/entries.js'
 import { diffGoMod } from '../golang/gomod.js'
-import { baseDecls, tsDeclGraph } from '../project/decls.js'
+import { baseDecls, baseHeader, tsDeclGraph } from '../project/decls.js'
 import { declImpacts } from '../decls/impact.js'
 import type { AnalysisRole } from '../classify/roles.js'
 import { KEY_SEPARATOR } from '../routes/paths.js'
@@ -241,23 +241,26 @@ export async function runAnalyze(ctx: Context, options: AnalyzeOptions, deps: An
         baseRoutes = routesBase === undefined ? null : await baseRouteTable(ctx, ws, mb, routesBase)
       }
       const manifests = await manifestDiffs(ctx, files, roleOf, mb, meta.head.sha)
-      const tsModified = files.filter((f) => f.status === 'modified' && roleOf(f.path) === 'source' && /\.(ts|tsx|mts|cts)$/.test(f.path)).map((f) => f.path)
-      const tsBase = await readFiles(ctx.repoRoot, mb, tsModified)
-      const tsHead = await readFiles(ctx.repoRoot, meta.head.sha, tsModified)
+      const scriptModified = files.filter((f) => f.status === 'modified' && ['source', 'resolvers', 'routes', 'barrel'].includes(roleOf(f.path)) && /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(f.path)).map((f) => f.path)
+      const tsBase = await readFiles(ctx.repoRoot, mb, scriptModified)
+      const tsHead = await readFiles(ctx.repoRoot, meta.head.sha, scriptModified)
+      // Only comments or formatting changed: no reach, no risk (the code both versions run is the same).
+      const commentsOnlyFiles = new Set(scriptModified.filter((p) => isCommentsOnlyChange(p, tsBase.get(p) ?? '', tsHead.get(p) ?? 'x(')))
+      const tsModified = scriptModified.filter((p) => roleOf(p) === 'source' && /\.(ts|tsx|mts|cts)$/.test(p) && !commentsOnlyFiles.has(p))
       const typeOnlyFiles = new Set(tsModified.filter((p) => isTypeOnlyModule(p, tsBase.get(p) ?? 'x') && isTypeOnlyModule(p, tsHead.get(p) ?? 'x')))
       // Declaration-level reach of changed TypeScript source files (renamed files keep the file graph: their
       // declaration ids change with the path). JavaScript keeps the file graph too: CommonJS and
       // globals (global.X = require(...)) are only followed there. Type-only files keep their own rule.
       // Frontends only: backends (often CommonJS with globals set at bootstrap) keep the file graph and the
       // resolver-level impacts, which follow globals the declaration graph would merge into the bootstrap code.
-      const declChanged = ws.backend ? [] : files.filter((f) => f.status !== 'renamed' && roleOf(f.path) === 'source' && /\.(ts|tsx|mts|cts)$/.test(f.path) && !typeOnlyFiles.has(f.path))
+      const declChanged = ws.backend ? [] : files.filter((f) => f.status !== 'renamed' && roleOf(f.path) === 'source' && /\.(ts|tsx|mts|cts)$/.test(f.path) && !typeOnlyFiles.has(f.path) && !commentsOnlyFiles.has(f.path))
       const declBaseText = await readFiles(ctx.repoRoot, mb, declChanged.filter((f) => f.status !== 'added').map((f) => f.oldPath ?? f.path))
-      const head = declChanged.length === 0 ? { module: '', files: [], decls: [], edges: [], entries: [], problems: [], comments: [] } : tsDeclGraph({ project: ws.project, repoRoot: toPosix(ctx.repoRoot), isOrigin: (p) => { const r = roleOf(p); return r !== 'test' && r !== 'story' && r !== 'excluded' && r !== 'outside' }, routes: ws.routes })
-      const baseOut = { module: '', files: [], decls: [...declBaseText].flatMap(([p, code]) => baseDecls(p, code)), edges: [], entries: [], problems: [], comments: [] }
+      const head = declChanged.length === 0 ? { module: '', files: [], decls: [], edges: [], entries: [], problems: [], comments: [], headers: {} } : tsDeclGraph({ project: ws.project, repoRoot: toPosix(ctx.repoRoot), isOrigin: (p) => { const r = roleOf(p); return r !== 'test' && r !== 'story' && r !== 'excluded' && r !== 'outside' }, routes: ws.routes })
+      const baseOut = { module: '', files: [], decls: [...declBaseText].flatMap(([p, code]) => baseDecls(p, code)), edges: [], entries: [], problems: [], comments: [], headers: Object.fromEntries([...declBaseText].map(([p, code]) => [p, baseHeader(p, code)])) }
       const existing = new Set((baseRoutes ?? ws.routes).routes.map((r) => r.key))
       const declImpactMap = declImpacts(baseOut, head, declChanged, () => true, { existing, erasedTypes: true })
       lap('base')
-      result = classify({ files, roleOf, manifests, typeOnlyFiles, declImpacts: declImpactMap, ...(backend ? { backend: { impacts: backend.impacts } } : {}), graph: ws.graph, routesFile: ws.routesFile, ...(ws.routesFromDirectory ? { routesFromDirectory: true } : {}), headRoutes: ws.routes, baseRoutes, baseText, headText })
+      result = classify({ files, roleOf, manifests, typeOnlyFiles, commentsOnlyFiles, declImpacts: declImpactMap, ...(backend ? { backend: { impacts: backend.impacts } } : {}), graph: ws.graph, routesFile: ws.routesFile, ...(ws.routesFromDirectory ? { routesFromDirectory: true } : {}), headRoutes: ws.routes, baseRoutes, baseText, headText })
     }
     // Added files that only declare things weigh almost nothing in the merge score.
     for (const f of result.files) if (f.status === 'added' && (f.role === 'source' || f.role === 'barrel') && isScriptFile(f.path) && isDeclarationsOnlyModule(f.path, readHead(f.path) ?? 'x(')) f.declarationsOnly = true

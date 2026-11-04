@@ -39,6 +39,16 @@ const SCENARIOS: Record<string, { classification: Output['classification']; affe
   'g3-store-changed': { classification: 'touches-existing', affected: ['GET /brands', 'RUN cmd/worker'] },
   // Comments and formatting change no declaration hash.
   'g4-comments-only': { classification: 'isolated', affected: [], check: (o) => { expect(o.reasons.map((r) => r.code)).toContain('declarations-additive'); } },
+  // A compiler directive is a comment the toolchain reads: //go:noinline on Brands.Get changes the build, so it is a
+  // change to the file, never comments-only.
+  'g12-go-directive-comment': {
+    classification: 'touches-existing',
+    affected: ['GET /brands', 'GET /brands/{id}'],
+    check: (o) => {
+      expect(o.files.find((f) => f.path === 'internal/service/brands.go')?.commentsOnly).toBeUndefined()
+      expect(o.reasons.map((r) => r.detail).join('\n')).toContain('imports or code directives changed')
+    },
+  },
   // A field of model.Brand: everything that handles brands; GET /me handles users only.
   'g5-model-field': { classification: 'touches-existing', affected: ['GET /brands', 'GET /brands/{id}', 'RUN cmd/worker'] },
   'g6-go-directive': { classification: 'global', affected: [], check: (o) => { expect(o.reasons.find((r) => r.code === 'manifest-changed')?.detail).toBe('fields changed: go'); } },

@@ -30,6 +30,8 @@ type Output struct {
 	Entries  []Entry   `json:"entries"`
 	Problems []Problem `json:"problems"`
 	Comments []Comment `json:"comments"`
+	// Headers lists, per file, what declarations leave out: imports and compiler directives.
+	Headers map[string][]string `json:"headers"`
 }
 
 func relPath(root, abs string) string {
@@ -66,7 +68,7 @@ func run() error {
 	}
 	g.link()
 	entries, problems := findEntries(g, pkgs)
-	out := Output{Decls: g.decls, Edges: g.edgeList(), Entries: entries, Problems: problems, Files: []string{}, Comments: []Comment{}}
+	out := Output{Decls: g.decls, Edges: g.edgeList(), Entries: entries, Problems: problems, Files: []string{}, Comments: []Comment{}, Headers: map[string][]string{}}
 	wanted := map[string]bool{}
 	for _, f := range strings.Split(*comments, ",") {
 		if f != "" {
@@ -83,6 +85,7 @@ func run() error {
 		for i, name := range p.names {
 			rel := g.rel(name)
 			out.Files = append(out.Files, rel)
+			out.Headers[rel] = fileHeader(p.files[i])
 			if wanted[rel] {
 				for _, group := range p.files[i].Comments {
 					for _, c := range group.List {

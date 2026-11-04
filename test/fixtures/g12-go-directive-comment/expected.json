@@ -1,0 +1,173 @@
+{
+  "schemaVersion": 1,
+  "surface": "backend",
+  "tool": {
+    "name": "farol",
+    "version": "<version>"
+  },
+  "repo": null,
+  "pr": null,
+  "base": {
+    "ref": "main",
+    "sha": "<base>"
+  },
+  "mergeBase": "<base>",
+  "head": {
+    "ref": "feature",
+    "sha": "<head>"
+  },
+  "analyzedAt": "2026-01-15T12:00:00.000Z",
+  "classification": "touches-existing",
+  "reasons": [
+    {
+      "code": "existing-file-modified",
+      "file": "internal/service/brands.go",
+      "detail": "imports or code directives changed: reached by 2 existing entry point(s): GET /brands; GET /brands/{id}"
+    }
+  ],
+  "files": [
+    {
+      "path": "internal/service/brands.go",
+      "status": "modified",
+      "role": "source",
+      "linesAdded": 1,
+      "linesRemoved": 0,
+      "additive": false
+    }
+  ],
+  "ignoredFiles": [],
+  "dependencies": {
+    "manifests": [],
+    "lockfiles": [],
+    "changes": [],
+    "summary": {
+      "critical": 0,
+      "major": 0,
+      "minor": 0,
+      "patch": 0,
+      "added": 0,
+      "removed": 0
+    }
+  },
+  "risk": {
+    "totalPages": 5,
+    "files": [
+      {
+        "path": "internal/service/brands.go",
+        "change": "modified",
+        "level": "medium",
+        "directImporters": 2,
+        "transitiveDependents": 2,
+        "centrality": 0.333,
+        "pagesReached": 2,
+        "routesReached": 2,
+        "why": "used by 2 of 5 existing operations"
+      }
+    ],
+    "summary": {
+      "high": 0,
+      "medium": 1,
+      "low": 0
+    }
+  },
+  "routes": {
+    "added": [],
+    "affected": [
+      {
+        "key": "GET /brands",
+        "path": "GET /brands",
+        "hasChildren": false,
+        "via": [
+          {
+            "file": "internal/service/brands.go",
+            "chain": [
+              "internal/api/handler.go",
+              "internal/service/brands.go"
+            ]
+          }
+        ]
+      },
+      {
+        "key": "GET /brands/{id}",
+        "path": "GET /brands/{id}",
+        "hasChildren": false,
+        "via": [
+          {
+            "file": "internal/service/brands.go",
+            "chain": [
+              "internal/api/handler.go",
+              "internal/service/brands.go"
+            ]
+          }
+        ]
+      }
+    ],
+    "disconnectedNewFiles": []
+  },
+  "signals": {
+    "coverage": {
+      "status": "not-provided",
+      "message": "no coverage report given (--coverage or signals.coverage)",
+      "files": [],
+      "total": null,
+      "ignoredFiles": []
+    },
+    "lint": {
+      "status": "not-provided",
+      "message": "no golangci-lint report given (--eslint or signals.eslint)",
+      "changedLines": null,
+      "otherLines": null,
+      "findings": [],
+      "omittedFindings": 0
+    },
+    "security": {
+      "status": "not-provided",
+      "findings": [],
+      "summary": {
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "message": "Go files are checked by gosec: give a golangci-lint JSON report (with gosec enabled) as the lint report"
+    },
+    "vulnerabilities": {
+      "status": "not-provided",
+      "message": "no audit report given (--audit or signals.audit)",
+      "related": [],
+      "total": null
+    },
+    "suppressions": {
+      "status": "ok",
+      "items": []
+    },
+    "testsModified": {
+      "status": "ok",
+      "files": []
+    }
+  },
+  "diagnostics": {
+    "unresolvedImports": [],
+    "dynamicRoutes": [],
+    "parseErrors": [],
+    "timingsMs": {
+      "diff": 0,
+      "helperSetup": 0,
+      "helperRead": 0,
+      "base": 0,
+      "classify": 0,
+      "signals": 0,
+      "diffs": 0
+    },
+    "error": null
+  },
+  "review": null,
+  "contracts": {
+    "readable": 3,
+    "entries": [],
+    "summary": {
+      "breaking": 0,
+      "dangerous": 0,
+      "safe": 0
+    }
+  }
+}

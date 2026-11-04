@@ -125,6 +125,23 @@ export interface DeclImpactOptions {
   erasedTypes?: boolean
 }
 
+/** The problem of a file whose imports, compiler directives or code-changing comments changed. */
+export const HEADER_CHANGED = 'imports or code directives changed'
+
+/**
+ * Whether the header entries of a file changed in a way its unchanged declarations can see. A name bound only before
+ * (unused now, or its users changed) or only after (new, used by changed code) does not count; the same name bound to
+ * another source, or any other entry added or removed, does. Missing on one side only: changed (fail closed).
+ */
+export function headerChanged(before: readonly string[] | undefined, after: readonly string[] | undefined): boolean {
+  if (before === undefined || after === undefined) return before !== after
+  const bound = (entries: readonly string[]): Set<string> => new Set(entries.filter((e) => e.startsWith('bind ')).map((e) => e.split(' ')[1] ?? ''))
+  const [boundBefore, boundAfter] = [bound(before), bound(after)]
+  const [setBefore, setAfter] = [new Set(before), new Set(after)]
+  const counts = (e: string, other: Set<string>): boolean => !e.startsWith('bind ') || other.has(e.split(' ')[1] ?? '')
+  return before.some((e) => !setAfter.has(e) && counts(e, boundAfter)) || after.some((e) => !setBefore.has(e) && counts(e, boundBefore))
+}
+
 export function declImpacts(base: DeclHelperOutput, head: DeclHelperOutput, files: readonly ChangedFile[], isSource: (path: string) => boolean, options: DeclImpactOptions = {}): Map<string, DeclFileImpact> {
   const b = new DeclGraph(base)
   const h = new DeclGraph(head)
@@ -171,6 +188,12 @@ export function declImpacts(base: DeclHelperOutput, head: DeclHelperOutput, file
       if (h.byId.has(d.id) || (options.erasedTypes === true && d.kind === 'type')) continue
       impact.problems.push(`${d.kind} ${short(d.id)} was removed`)
       hit(b.entriesReaching([i], existing), short(d.id))
+    }
+    // Imports and directives are outside every declaration: a name now imported from another module, a side-effect
+    // import or a //go:embed of other files changes what the file's unchanged declarations run.
+    if (file.status !== 'added' && file.status !== 'deleted' && headerChanged(base.headers?.[oldPath], head.headers?.[file.path])) {
+      impact.problems.push(HEADER_CHANGED)
+      hit(h.entriesReaching(headHere.map(([, i]) => i), existing), file.path)
     }
     // Routes registered in this file: a different handler or middleware set changes what an existing route runs.
     for (const entry of head.entries) {

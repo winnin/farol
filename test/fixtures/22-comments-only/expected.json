@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "surface": "frontend",
+  "tool": {
+    "name": "farol",
+    "version": "<version>"
+  },
+  "repo": null,
+  "pr": null,
+  "base": {
+    "ref": "main",
+    "sha": "<base>"
+  },
+  "mergeBase": "<base>",
+  "head": {
+    "ref": "feature",
+    "sha": "<head>"
+  },
+  "analyzedAt": "2026-01-15T12:00:00.000Z",
+  "classification": "isolated",
+  "reasons": [
+    {
+      "code": "declarations-additive",
+      "file": "src/components/Card.tsx",
+      "detail": "only comments or formatting changed"
+    },
+    {
+      "code": "no-existing-code-touched",
+      "detail": "the PR only adds new files, routes, exports or keys, or changes tests"
+    }
+  ],
+  "files": [
+    {
+      "path": "src/components/Card.tsx",
+      "status": "modified",
+      "role": "source",
+      "linesAdded": 5,
+      "linesRemoved": 0,
+      "additive": true,
+      "commentsOnly": true
+    }
+  ],
+  "ignoredFiles": [],
+  "dependencies": {
+    "manifests": [],
+    "lockfiles": [],
+    "changes": [],
+    "summary": {
+      "critical": 0,
+      "major": 0,
+      "minor": 0,
+      "patch": 0,
+      "added": 0,
+      "removed": 0
+    }
+  },
+  "risk": {
+    "totalPages": 4,
+    "files": [
+      {
+        "path": "src/components/Card.tsx",
+        "change": "additive",
+        "level": "low",
+        "directImporters": 3,
+        "transitiveDependents": 6,
+        "centrality": 0.3,
+        "pagesReached": 2,
+        "routesReached": 2,
+        "why": "additive change: nothing that existed changed"
+      }
+    ],
+    "summary": {
+      "high": 0,
+      "medium": 0,
+      "low": 1
+    }
+  },
+  "routes": {
+    "added": [],
+    "affected": [],
+    "disconnectedNewFiles": []
+  },
+  "signals": {
+    "coverage": {
+      "status": "not-provided",
+      "message": "no coverage report given (--coverage or signals.coverage)",
+      "files": [],
+      "total": null,
+      "ignoredFiles": []
+    },
+    "lint": {
+      "status": "not-provided",
+      "message": "no ESLint report given (--eslint or signals.eslint)",
+      "changedLines": null,
+      "otherLines": null,
+      "findings": [],
+      "omittedFindings": 0
+    },
+    "security": {
+      "status": "ok",
+      "findings": [],
+      "summary": {
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
+    "vulnerabilities": {
+      "status": "not-provided",
+      "message": "no audit report given (--audit or signals.audit)",
+      "related": [],
+      "total": null
+    },
+    "suppressions": {
+      "status": "ok",
+      "items": []
+    },
+    "testsModified": {
+      "status": "ok",
+      "files": []
+    }
+  },
+  "diagnostics": {
+    "unresolvedImports": [],
+    "dynamicRoutes": [],
+    "parseErrors": [],
+    "timingsMs": {
+      "diff": 0,
+      "readTree": 0,
+      "program": 0,
+      "graph": 0,
+      "routes": 0,
+      "base": 0,
+      "classify": 0,
+      "signals": 0,
+      "diffs": 0
+    },
+    "error": null
+  },
+  "review": null
+}
