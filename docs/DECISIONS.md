@@ -961,3 +961,25 @@ Every decision not covered by `docs/SPEC.md`. One entry per decision: problem, o
 - **An old global, manifest, lockfile or infrastructure path does not force its own class** (decided with Ethan): `touches-existing` meets "never `isolated`". A global file renamed to a source path stays `touches-existing`, as before.
 - **Limits, not changed:** a rename out lists no affected entry points, and the file leaves the risk list, so risk can read low. In Go and Python a delete lists its entry points, and this rename does not. A source file renamed to a lockfile path, with real dependency changes in the same PR, stays `isolated` (read in the code, not run). An old path outside the project counts as not production code: treating it as production would make every rename inside another package of a monorepo `touches-existing`. A stale import of it still gives `unknown`. A manifest renamed to a test, excluded or ignored path gets no dependency diff, so its removed dependencies are not listed (a delete of it gives `manifest-changed`). An ignored old path counts as production code: a rename from it to a test path gives `touches-existing`, as a rename from it to a source path already did. Reviewer suggestions leave out an ignored new path, as the signals do.
 - **Reason:** CHA-15044.
+
+## 2026-11-05 — Ruby support classifies PRs and lists no endpoints (R0 spike, CHA-14816)
+
+- **Question:** can a parse-only Ruby helper give useful classes and endpoint lists for empwr `api/` (Rails 8.1, Ruby 3.3)?
+- **Method:** a throwaway helper (Prism, `ruby --disable-gems`, never loads the app) ran on 50 PRs: every 8th of the 399 `api/` PRs in the 90 days up to empwr `9093adae5`, without release and revert PRs. Three strategies for a call on a receiver: every method with that name; a type guessed from a constant or a variable name, else by name; a receiver of unknown type reaches nothing. 10 PRs were checked by hand. The results were the same on Ruby 3.3.13 (Prism 0.19) and Ruby 4.0.9 (Prism 1.8).
+- **Criteria (fixed before measuring):** a strategy counts only with 100% recall on the hand checks. Go if at most 30% of PRs where code changed reach more than 20% of the routes, the median of `touches-existing` PRs is at most 50 endpoints, and `unknown` covers at most 20%.
+- **Result: no-go on endpoints.**
+
+  | Strategy | Over 20% of routes | Median endpoints | Recall |
+  |---|---|---|---|
+  | By name | 83% | 1,562 | below 100% on 5 PRs |
+  | Typed | 86% | 1,562 | below 100% on 5 PRs |
+  | Strict | 42% | 6 | 47–91% on 5 PRs |
+
+  A typed call falls back to by name when the type is unknown, and one `@block.call` then reaches every endpoint. Strict reach misses MCP tools, view components and callback chains. Classes such as `Issue` are used in most of `api/v2`: the hand checks found more than 40 affected endpoints on half of the PRs. A complete list is nearly every endpoint; a short list misses callers.
+- **The class works:** 31 `touches-existing`, 9 `global`, 5 `unknown`, 5 `isolated`. `unknown` is 14% of PRs where code changed. Migrations changed in 10 PRs.
+- **Decision (Ethan):** Ruby support is class only. It keeps roles, change detection by method and class-body statement, `unknown` for code that cannot be read statically (computed `send`, `define_method`, `method_missing`, a removed class still named, an unreadable `routes.rb`), the `Gemfile` diff and the migration signal. It lists no endpoints: R2 (`routes.rb` entry points) and the reach part of R1 are dropped.
+- **Draft roles (from the spike):** `global`: `Gemfile`, `Gemfile.lock`, `config/application.rb`, `config/environments/**`, `config/initializers/**`, `db/schema.rb`, `ApplicationController`, `ApplicationRecord`, `ApplicationJob`, `ability.rb`. Migrations (`db/migrate/**`, `db/structure.sql`) are their own signal and do not set the class. A `.md` file is documentation.
+- **Change detection (from the spike):** adding a statement to a class body is additive, except a hook (callback, validation, `include`/`extend`/`prepend`, `default_scope`, `rescue_from`, `skip_*`, `included`) or a new superclass: these change what existing code does. Removing a statement is a change.
+- **Ruby version:** Prism 0.19 from the Ruby 3.3 stdlib is enough. One difference was found: Prism 1.x rejects a top-level `yield` (ERB layouts), so ERB code is parsed inside a method. Helper tests run on Ruby 3.3 and on 3.4 or later.
+- **No coverage signal for `api/`:** CI already blocks on undercover, and farol-style diff coverage agreed with it on the PR checked (179/179 lines). R4 keeps RuboCop and Brakeman only.
+- **Reason:** CHA-14816. The spike code, hand checks and results are attached to the ticket.
